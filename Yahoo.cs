@@ -97,6 +97,56 @@ public static class Yahoo
         }
     }
 
+    // 국장 종목코드 → Yahoo 심볼 (코스피 .KS, 코스닥 .KQ). 미국은 그대로.
+    public static string Symbol(Quote q) => q.IsUs ? q.Code : q.Code + (q.Market == "KOSPI" ? ".KS" : ".KQ");
+
+    public record Point(DateTime Date, double Close);
+
+    // range: 1mo / 1y / 5y. 5년은 주 단위, 나머지는 일 단위. crumb 없이 된다.
+    public static async Task<List<Point>> Chart(string symbol, string range)
+    {
+        string interval = range == "5y" ? "1wk" : "1d";
+        var txt = await http.GetStringAsync($"{Host}/v8/finance/chart/{Uri.EscapeDataString(symbol)}?range={range}&interval={interval}");
+        using var doc = JsonDocument.Parse(txt);
+        var result = doc.RootElement.GetProperty("chart").GetProperty("result");
+        var list = new List<Point>();
+        if (result.ValueKind != JsonValueKind.Array || result.GetArrayLength() == 0) return list;
+        var r = result[0];
+        if (!r.TryGetProperty("timestamp", out var ts)) return list;
+        var close = r.GetProperty("indicators").GetProperty("quote")[0].GetProperty("close");
+        for (int i = 0; i < ts.GetArrayLength(); i++)
+            if (close[i].ValueKind == JsonValueKind.Number) // 휴장일 등은 null
+                list.Add(new Point(DateTimeOffset.FromUnixTimeSeconds(ts[i].GetInt64()).LocalDateTime.Date, close[i].GetDouble()));
+        return list;
+    }
+
+    public record Profile(string Sector, string Industry, long Employees, string Website, string Summary, string Category);
+
+    public static async Task<Profile> GetProfile(string symbol)
+    {
+        await EnsureCrumb();
+        var txt = await http.GetStringAsync(
+            $"{Host}/v10/finance/quoteSummary/{Uri.EscapeDataString(symbol)}?modules=assetProfile,fundProfile&crumb={Uri.EscapeDataString(crumb)}");
+        using var doc = JsonDocument.Parse(txt);
+        var result = doc.RootElement.GetProperty("quoteSummary").GetProperty("result");
+        if (result.ValueKind != JsonValueKind.Array || result.GetArrayLength() == 0) return null;
+        var r = result[0];
+        var p = r.TryGetProperty("assetProfile", out var a) ? a : default;
+        string Get(string n) => p.ValueKind == JsonValueKind.Object ? S(p, n) : null;
+        string category = r.TryGetProperty("fundProfile", out var f) ? S(f, "categoryName") : null;
+        long emp = p.ValueKind == JsonValueKind.Object && p.TryGetProperty("fullTimeEmployees", out var e) && e.ValueKind == JsonValueKind.Number ? e.GetInt64() : 0;
+        return new Profile(Get("sector"), Get("industry"), emp, Get("website"), Get("longBusinessSummary"), category);
+    }
+
+    // Yahoo 업종(GICS 11개) 한국어
+    public static string SectorKo(string s) => s switch
+    {
+        "Technology" => "정보기술", "Communication Services" => "커뮤니케이션", "Consumer Cyclical" => "경기소비재",
+        "Consumer Defensive" => "필수소비재", "Healthcare" => "헬스케어", "Financial Services" => "금융",
+        "Industrials" => "산업재", "Energy" => "에너지", "Basic Materials" => "소재", "Utilities" => "유틸리티",
+        "Real Estate" => "부동산", null => null, _ => s,
+    };
+
     public static async Task<(List<Quote> quotes, double usdKrw)> Fetch()
     {
         await EnsureCrumb();

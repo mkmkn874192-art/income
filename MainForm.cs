@@ -150,6 +150,12 @@ public class MainForm : Form
         rdoReal.CheckedChanged += (_, _) => OnModeChanged();
         txtSearch.TextChanged += (_, _) => { searchDelay.Stop(); searchDelay.Start(); };
         searchDelay.Tick += (_, _) => { searchDelay.Stop(); ApplySearch(); };
+        detailDelay.Tick += async (_, _) =>
+        {
+            detailDelay.Stop();
+            int v = detailVersion;
+            await Task.WhenAll(LoadChart(detailCode, v), LoadProfile(detailCode, v));
+        };
 
         LoadKeys();
         UpdateModeBadge();
@@ -291,12 +297,26 @@ public class MainForm : Form
             metric[n] = v;
         }
 
-        var inner = new Panel { Dock = DockStyle.Fill };
-        Label Section(string t) => new() { Text = t, Dock = DockStyle.Top, Height = 28, Font = Theme.H2, ForeColor = Theme.Text, Padding = new Padding(0, 8, 0, 0) };
+        var inner = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+        Theme.DarkScrollbars(inner);
+        Label Section(string t) => new() { Text = t, Dock = DockStyle.Top, Height = 32, Font = Theme.H2, ForeColor = Theme.Text, Padding = new Padding(0, 12, 0, 0) };
         // Dock=Top은 나중에 추가한 것이 위로 간다 → 아래쪽부터 추가
         var addRow = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(0, 6, 0, 0) };
         addRow.Controls.AddRange(new Control[] { numAddQty, Theme.Text_("주"), btnAdd });
         btnAdd.Click += async (_, _) => await AddToIncome();
+
+        var ranges = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(0, 8, 0, 4) };
+        foreach (var (label, range) in new[] { ("1개월", "1mo"), ("1년", "1y"), ("5년", "5y") })
+        {
+            var p = new Pill(label, Theme.Text, clickable: true) { Selected = range == chartRange };
+            p.Click += async (_, _) =>
+            {
+                chartRange = range;
+                foreach (Pill x in ranges.Controls) { x.Selected = x == p; x.Invalidate(); }
+                await LoadChart(detailCode, ++detailVersion);
+            };
+            ranges.Controls.Add(p);
+        }
 
         inner.Controls.Add(dpsChart);
         inner.Controls.Add(Section("주당배당금 추이 (원)"));
@@ -306,10 +326,77 @@ public class MainForm : Form
         inner.Controls.Add(dDivCalc);
         inner.Controls.Add(Section("배당으로 받을 돈"));
         inner.Controls.Add(dMetrics);
+        inner.Controls.Add(Section("핵심 지표"));
+        inner.Controls.Add(dProfile);
+        inner.Controls.Add(Section("회사 소개"));
+        inner.Controls.Add(priceChart);
+        inner.Controls.Add(ranges);
         inner.Controls.Add(dPrice);
         inner.Controls.Add(dSub);
         inner.Controls.Add(dName);
-        return new Card(null, inner) { Dock = DockStyle.Right, Width = 380, Margin = Padding.Empty, Padding = new Padding(18, 14, 18, 14) };
+        return new Card(null, inner) { Dock = DockStyle.Right, Width = 460, Margin = Padding.Empty, Padding = new Padding(18, 14, 8, 14) };
+    }
+
+    // ----- 상세: 시세 그래프·회사 소개 (선택이 바뀔 때마다 Yahoo·DART에서 받아 캐시) -----
+    readonly PriceChart priceChart = new();
+    readonly Label dProfile = new() { Dock = DockStyle.Top, Height = 170, Font = Theme.Small, ForeColor = Theme.Text, Padding = new Padding(0, 2, 8, 0) };
+    readonly System.Windows.Forms.Timer detailDelay = new() { Interval = 250 }; // 방향키로 훑을 때 매번 받지 않게
+    readonly Dictionary<string, List<Yahoo.Point>> chartCache = new();
+    readonly Dictionary<string, string> profileCache = new();
+    string chartRange = "1y", detailCode;
+    int detailVersion;
+
+    async Task LoadChart(string code, int version)
+    {
+        if (code == null || !rowByCode.TryGetValue(code, out var r)) return;
+        string key = Yahoo.Symbol(r.Q) + "|" + chartRange;
+        if (!chartCache.TryGetValue(key, out var pts))
+        {
+            priceChart.SetMessage("시세 기록을 받는 중...");
+            try { pts = chartCache[key] = await Yahoo.Chart(Yahoo.Symbol(r.Q), chartRange); }
+            catch (Exception ex) { if (version == detailVersion) priceChart.SetMessage("시세 기록을 못 받았어요: " + ex.Message); return; }
+        }
+        if (version == detailVersion) priceChart.SetData(pts, r.Q.IsUs); // 그 사이 다른 종목을 골랐으면 버린다
+    }
+
+    async Task LoadProfile(string code, int version)
+    {
+        if (!rowByCode.TryGetValue(code, out var r)) return;
+        if (!profileCache.TryGetValue(code, out var text))
+        {
+            dProfile.Text = "회사 정보를 받는 중...";
+            var sb = new StringBuilder();
+            try
+            {
+                if (!r.Q.IsUs && !string.IsNullOrWhiteSpace(keys[1]))
+                {
+                    var c = await Income.CompanyInfo(keys[1], code);
+                    if (c != null)
+                    {
+                        string est = c.Established?.Length == 8 ? $"{c.Established[..4]}.{c.Established[4..6]}.{c.Established[6..]}" : c.Established;
+                        sb.AppendLine($"대표 {c.Ceo}  ·  설립 {est}" + (string.IsNullOrEmpty(c.Homepage) ? "" : $"  ·  {c.Homepage}"));
+                    }
+                }
+                var p = await Yahoo.GetProfile(Yahoo.Symbol(r.Q));
+                if (p != null)
+                {
+                    var head = new List<string>();
+                    if (p.Sector != null) head.Add($"{Yahoo.SectorKo(p.Sector)} · {p.Industry}");
+                    if (p.Category != null) head.Add($"펀드 유형: {p.Category}");
+                    if (p.Employees > 0) head.Add($"직원 {p.Employees:N0}명");
+                    if (r.Q.IsUs && p.Website != null) head.Add(p.Website);
+                    if (head.Count > 0) sb.AppendLine(string.Join("  ·  ", head));
+                    if (!string.IsNullOrWhiteSpace(p.Summary))
+                        sb.Append(p.Summary.Length > 520 ? p.Summary[..520].TrimEnd() + "…" : p.Summary);
+                }
+                text = profileCache[code] = sb.Length > 0 ? sb.ToString() : "회사 정보가 없어요.";
+            }
+            catch (Exception ex)
+            {
+                text = "회사 정보를 못 받았어요: " + ex.Message.Split('\n')[0];
+            }
+        }
+        if (version == detailVersion) dProfile.Text = text;
     }
 
     Control BuildScreenPage()
@@ -1003,6 +1090,12 @@ public class MainForm : Form
         metric["이익성장"].Text = F(r.Growth, "0", "%");
         metric["점수"].Text = r.Score?.ToString() ?? "—";
         metric["배당 연수"].Text = r.DivYears?.ToString() ?? "—";
+
+        // 시세 그래프·회사 소개는 잠깐 멈췄을 때 받는다
+        detailCode = code;
+        detailVersion++;
+        detailDelay.Stop();
+        detailDelay.Start();
 
         var s = series.GetValueOrDefault(code);
         niChart.SetData(s?.NetIncome);

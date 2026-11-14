@@ -69,6 +69,22 @@ public static class Income
         }
     }
 
+    // DART 기업개황: 대표자, 설립일(yyyyMMdd), 홈페이지
+    public record Company(string Ceo, string Established, string Homepage);
+
+    public static async Task<Company> CompanyInfo(string dartKey, string code)
+    {
+        using var http = Screener.NewHttp();
+        var map = await CorpMap(dartKey, http);
+        string baseCode = code.EndsWith("0") ? code : code[..5] + "0";
+        if (!map.TryGetValue(baseCode, out var corp)) return null;
+        using var doc = JsonDocument.Parse(await http.GetStringAsync(
+            $"https://opendart.fss.or.kr/api/company.json?crtfc_key={dartKey}&corp_code={corp}"));
+        var r = doc.RootElement;
+        string S(string n) => r.TryGetProperty(n, out var p) ? p.GetString()?.Trim() : null;
+        return S("status") == "000" ? new Company(S("ceo_nm"), S("est_dt"), S("hm_url")) : null;
+    }
+
     // 최근 사업보고서의 보통주 주당 현금배당금. 우선주 코드는 우선주 배당을 찾는다. 못 찾으면 null (ETF 등).
     public static async Task<(double dps, int year)?> LatestDps(string dartKey, string code)
     {
