@@ -1,0 +1,10 @@
+# 빌드 결과
+bin/
+obj/
+.vs/
+*.user
+
+# API 키 — 절대 올리지 않는다
+*appkey*.txt
+*secretkey*.txt
+keys.txt
