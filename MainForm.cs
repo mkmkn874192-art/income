@@ -31,7 +31,7 @@ public class MainForm : Form
     readonly TextBox txtSearch = new()
     {
         BorderStyle = BorderStyle.None, Font = Theme.Search, BackColor = Theme.InputBg, ForeColor = Theme.Text,
-        PlaceholderText = "종목명 · 코드 · 라벨 검색   예) 배당주, 가치주 코스피, 삼성, 005930",
+        PlaceholderText = "종목명 · 코드 검색, 또는 '배당주', '미국 배당주', '가치주 코스피'처럼 검색",
     };
     readonly FlowLayoutPanel chipBar = new() { Dock = DockStyle.Top, AutoSize = true, BackColor = Theme.Bg, Padding = new Padding(0, 10, 0, 0) };
     readonly List<Pill> marketPills = new();
@@ -161,7 +161,9 @@ public class MainForm : Form
         {
             RefreshIncome();
             LoadSavedData();
-            await RefreshQuotes();
+            refreshTimer.Tick += async (_, _) => await OnRefreshTimer();
+            refreshTimer.Start();
+            await OnRefreshTimer();
         };
     }
 
@@ -238,7 +240,7 @@ public class MainForm : Form
         searchBox.Controls.Add(txtSearch);
         searchBox.Controls.Add(new Label { Text = "", Font = Theme.Icon, ForeColor = Theme.Muted, Dock = DockStyle.Left, Width = 30 });
 
-        foreach (var (label, code) in new[] { ("전체", (string)null), ("코스피", "KOSPI"), ("코스닥", "KOSDAQ") })
+        foreach (var (label, code) in new[] { ("전체", (string)null), ("코스피", "KOSPI"), ("코스닥", "KOSDAQ"), ("미국", "US") })
         {
             var p = new Pill(label, Theme.Text, clickable: true) { Selected = code == null, Tag = code };
             p.Click += (_, _) =>
@@ -273,7 +275,7 @@ public class MainForm : Form
         page.Controls.Add(chipBar);
         page.Controls.Add(Theme.Spacer(4));
         page.Controls.Add(searchBox);
-        page.Controls.Add(Header("시장", "코스피·코스닥 전 종목을 한눈에. 이름·코드는 물론 '배당주', '가치주' 같은 말로도 찾을 수 있어요."));
+        page.Controls.Add(Header("시장", "코스피·코스닥 전 종목과 미국 주식·ETF를 한눈에. 이름·코드는 물론 '배당주', '미국 배당주' 같은 말로도 찾을 수 있어요."));
         return page;
     }
 
@@ -548,8 +550,9 @@ public class MainForm : Form
             if (e.RowIndex < 0) return;
             string n = gridIncome.Columns[e.ColumnIndex].Name;
             if (ColFormat.TryGetValue(n, out var f)) e.CellStyle.Format = f;
-            if (n is "수량" or "현재가(원)" or "주당배당금") e.CellStyle.BackColor = Theme.InputBg; // 고칠 수 있는 칸
-            if (n is "연 배당" or "월 배당") { e.CellStyle.ForeColor = Color.FromArgb(52, 211, 153); e.CellStyle.Font = Theme.Bold; }
+            if (n is "현재가" or "주당배당금" && gridIncome.Rows[e.RowIndex].Cells["통화"].Value as string == "USD") e.CellStyle.Format = "$#,##0.00";
+            if (n is "수량" or "현재가" or "주당배당금") e.CellStyle.BackColor = Theme.InputBg; // 고칠 수 있는 칸
+            if (n is "연 배당(원)" or "월 배당(원)") { e.CellStyle.ForeColor = Color.FromArgb(52, 211, 153); e.CellStyle.Font = Theme.Bold; }
             if (n == "출처") e.CellStyle.ForeColor = Theme.Muted;
         };
         foreach (Control c in new Control[] { numGoal }) Theme.StyleInput(c);
@@ -614,22 +617,17 @@ public class MainForm : Form
 
     void RefreshIncome()
     {
+        // 현재가·주당배당금은 그 나라 통화, 금액 열은 원화 (미국은 현재 환율로 환산)
         incomeTable = new DataTable();
-        incomeTable.Columns.Add("종목명"); incomeTable.Columns.Add("코드");
-        incomeTable.Columns.Add("수량", typeof(double));
-        incomeTable.Columns.Add("현재가(원)", typeof(double));
-        incomeTable.Columns.Add("평가금액", typeof(double), "[수량] * [현재가(원)]");
-        incomeTable.Columns.Add("주당배당금", typeof(double));
-        incomeTable.Columns.Add("배당률%", typeof(double), "IIF([현재가(원)] > 0, [주당배당금] / [현재가(원)] * 100, 0)");
-        incomeTable.Columns.Add("연 배당", typeof(double), "[수량] * [주당배당금]");
-        incomeTable.Columns.Add("월 배당", typeof(double), "[수량] * [주당배당금] / 12");
+        incomeTable.Columns.Add("종목명"); incomeTable.Columns.Add("코드"); incomeTable.Columns.Add("통화");
+        foreach (var c in new[] { "수량", "현재가", "주당배당금", "배당률%", "평가금액(원)", "연 배당(원)", "월 배당(원)" })
+            incomeTable.Columns.Add(c, typeof(double));
         incomeTable.Columns.Add("출처");
         foreach (var i in incomeItems)
         {
-            var row = incomeTable.NewRow(); // 계산 열에는 값을 넣지 않는다
-            row["종목명"] = i.Name; row["코드"] = i.Code; row["수량"] = i.Qty; row["현재가(원)"] = i.Price;
-            row["주당배당금"] = i.Dps; row["출처"] = i.Source;
-            incomeTable.Rows.Add(row);
+            double fx = Market.Fx(i.Currency), keep = afterTax ? 1 - Income.Tax(i.Currency) : 1;
+            incomeTable.Rows.Add(i.Name, i.Code, i.Currency, i.Qty, i.Price, i.Dps, i.Price > 0 ? i.Dps / i.Price * 100 : 0,
+                i.Qty * i.Price * fx, i.Qty * i.Dps * fx * keep, i.Qty * i.Dps * fx * keep / 12, i.Source);
         }
         incomeTable.ColumnChanged += (_, e) =>
         {
@@ -637,7 +635,7 @@ public class MainForm : Form
             if (item == null) return;
             double v = e.ProposedValue is double d ? d : 0;
             if (e.Column.ColumnName == "수량") item.Qty = v;
-            else if (e.Column.ColumnName == "현재가(원)") item.Price = v;
+            else if (e.Column.ColumnName == "현재가") item.Price = v;
             else if (e.Column.ColumnName == "주당배당금") { item.Dps = v; item.Source = "직접 입력"; }
             else return;
             Income.Save(incomeItems);
@@ -645,11 +643,11 @@ public class MainForm : Form
         };
         gridIncome.DataSource = incomeTable;
         foreach (DataGridViewColumn c in gridIncome.Columns)
-            c.ReadOnly = c.Name is not ("수량" or "현재가(원)" or "주당배당금");
+            c.ReadOnly = c.Name is not ("수량" or "현재가" or "주당배당금");
         FitColumns(gridIncome, incomeTable, "종목명");
 
-        double annual = incomeItems.Sum(i => i.Qty * i.Dps) * (afterTax ? 1 - Income.TaxRate : 1);
-        double invested = incomeItems.Sum(i => i.Qty * i.Price);
+        double annual = incomeItems.Sum(i => i.Qty * i.Dps * Market.Fx(i.Currency) * (afterTax ? 1 - Income.Tax(i.Currency) : 1));
+        double invested = incomeItems.Sum(i => i.Qty * i.Price * Market.Fx(i.Currency));
         double yield = invested > 0 ? annual / invested : 0;
         string tax = afterTax ? "세후" : "세전";
         kYear.Set(Krw(annual), Color.FromArgb(52, 211, 153), $"{tax} 예상", "1년");
@@ -672,12 +670,15 @@ public class MainForm : Form
         goalBar.Invalidate();
         lblIncome.Text = incomeItems.Count == 0
             ? "아직 담은 종목이 없어요. [시장]에서 종목을 고른 뒤 [배당 수입에 담기]를 누르거나, 키움 보유종목을 불러오세요."
-            : $"{incomeItems.Count}종목 · 투자금 {Krw(invested)} · 평균 배당률 {yield * 100:0.00}% ({tax})  ·  추정치예요. 실제 배당은 회사 결정에 따라 달라지고, 월·주·일 금액은 1년치를 고르게 나눈 평균이에요.";
+            : $"{incomeItems.Count}종목 · 투자금 {Krw(invested)} · 평균 배당률 {yield * 100:0.00}% ({tax})" +
+              (incomeItems.Any(i => i.Currency == "USD") ? $" · 환율 {Market.UsdKrw:N1}원" : "") +
+              "  ·  추정치예요. 실제 배당은 회사 결정에 따라 달라지고, 월·주·일 금액은 1년치를 고르게 나눈 평균이에요. 세후: 국내 15.4%, 미국 15%";
     }
 
     // 스크리닝 때 모은 가장 최근 연도의 주당배당금
     double? LatestDps(string code)
     {
+        if (rowByCode.TryGetValue(code, out var row) && row.Q.IsUs) return row.Q.Dps; // 미국: Yahoo 배당률 기준
         var d = series.GetValueOrDefault(code)?.Dps;
         if (d != null && d.Count > 0) return d[d.Keys.Max()];
         return incomeItems.FirstOrDefault(i => i.Code == code)?.Dps;
@@ -695,6 +696,8 @@ public class MainForm : Form
 
     async Task<(double dps, string source)> FindDps(string code)
     {
+        if (rowByCode.TryGetValue(code, out var row) && row.Q.IsUs)
+            return (row.Q.Dps ?? 0, row.Q.Dps > 0 ? $"Yahoo 배당률 {row.Q.DivYield:0.00}%" : "직접 입력 필요");
         var d = series.GetValueOrDefault(code)?.Dps;
         if (d != null && d.Count > 0)
         {
@@ -716,7 +719,7 @@ public class MainForm : Form
             if (item == null)
             {
                 var (dps, src) = await FindDps(code);
-                item = new IncomeItem { Code = code, Name = r.Q.Name, Dps = dps, Source = src };
+                item = new IncomeItem { Code = code, Name = r.Q.Name, Dps = dps, Source = src, Currency = r.Q.Currency };
                 incomeItems.Add(item);
             }
             item.Qty += (double)numAddQty.Value;
@@ -785,31 +788,57 @@ public class MainForm : Form
         catch { screenTable = null; }
         series = Market.LoadSeries();
         (basDt, quotes) = Market.LoadCached();
-        if (quotes != null) RebuildRows();
+        usQuotes = Market.LoadUsCached();
+        if (quotes != null || usQuotes != null) RebuildRows();
     }
 
+    List<Quote> usQuotes;
+    DateTime lastRefresh;
+    string refreshNote = "";
+    readonly System.Windows.Forms.Timer refreshTimer = new() { Interval = 30 * 60 * 1000 };
+    bool refreshing;
+
+    // 국장(공공데이터, 하루 1번 종가)과 미장(Yahoo, 약 15분 지연)을 각각 받는다. 한쪽이 실패해도 다른 쪽은 갱신.
     async Task RefreshQuotes()
     {
-        if (string.IsNullOrWhiteSpace(keys[0])) { lblMarket.Text = "설정에서 공공데이터포털 키를 넣으면 전 종목 시세가 보여요."; return; }
+        if (refreshing) return;
+        refreshing = true;
+        var fails = new List<string>();
         try
         {
-            if (quotes == null) lblMarket.Text = "전 종목 시세를 받는 중...";
-            var (d, q) = await Market.Fetch(keys[0], Screener.NewHttp());
-            if (d != basDt || quotes == null)
+            if (quotes == null && usQuotes == null) lblMarket.Text = "전 종목 시세를 받는 중...";
+            if (!string.IsNullOrWhiteSpace(keys[0]))
             {
-                (basDt, quotes) = (d, q);
-                RebuildRows();
+                try { (basDt, quotes) = await Market.Fetch(keys[0], Screener.NewHttp()); }
+                catch (Exception ex) { fails.Add("국장: " + ex.Message.Split('\n')[0]); }
             }
+            else fails.Add("국장: 설정에서 공공데이터포털 키를 넣어주세요");
+            try { usQuotes = await Market.FetchUs(); }
+            catch (Exception ex) { fails.Add("미장: " + ex.Message.Split('\n')[0]); }
+
+            lastRefresh = DateTime.Now;
+            refreshNote = fails.Count == 0 ? "" : "  ·  갱신 실패 — " + string.Join(", ", fails);
+            if (quotes != null || usQuotes != null) RebuildRows();
+            else lblMarket.Text = "시세를 못 받았어요" + refreshNote;
         }
-        catch (Exception ex)
+        finally
         {
-            lblMarket.Text = quotes == null ? "시세를 못 받았어요: " + ex.Message.Split('\n')[0] : lblMarket.Text + "  (최신 시세 갱신 실패)";
+            refreshing = false;
         }
+    }
+
+    // 30분마다: 시세 갱신 + 가치 분석 결과가 하루 넘게 지났으면 다시 분석
+    async Task OnRefreshTimer()
+    {
+        await RefreshQuotes();
+        bool stale = !File.Exists(Market.ScreenFile) || File.GetLastWriteTime(Market.ScreenFile) < DateTime.Now.AddDays(-1);
+        if (stale && btnRun.Enabled && !string.IsNullOrWhiteSpace(keys[0]) && !string.IsNullOrWhiteSpace(keys[1]))
+            await RunScreen(auto: true);
     }
 
     void RebuildRows()
     {
-        allRows = Labels.Build(quotes, screenTable);
+        allRows = Labels.Build((quotes ?? new()).Concat(usQuotes ?? new()).ToList(), screenTable);
         rowByCode = allRows.ToDictionary(r => r.Q.Code);
         ApplySearch();
 
@@ -821,8 +850,10 @@ public class MainForm : Form
 
     void ApplySearch()
     {
-        if (quotes == null) return;
-        var source = marketFilter == null ? allRows : allRows.Where(r => r.Q.Market == marketFilter);
+        if (quotes == null && usQuotes == null) return;
+        var source = marketFilter == null ? allRows
+                   : marketFilter == "US" ? allRows.Where(r => r.Q.IsUs)
+                   : allRows.Where(r => r.Q.Market == marketFilter);
         var found = Labels.Search(source, txtSearch.Text, out var rule);
 
         var t = new DataTable();
@@ -832,7 +863,7 @@ public class MainForm : Form
         {
             double? dps = LatestDps(r.Q.Code);
             double? div = dps > 0 && r.Q.Price > 0 ? dps / r.Q.Price * 100 : r.Div; // 현재가 기준 배당률
-            t.Rows.Add(r.Q.Code, r.Q.Market == "KOSPI" ? "코스피" : "코스닥", r.Q.Name, Math.Round(r.Q.Cap / 1e8),
+            t.Rows.Add(r.Q.Code, MarketName(r.Q.Market), r.Q.Name, Math.Round(r.Q.Cap / 1e8),
                 r.Q.Price, r.Q.ChangeRate, div.HasValue ? div.Value : DBNull.Value);
         }
         gridMarket.DataSource = t;
@@ -841,14 +872,15 @@ public class MainForm : Form
         string date = basDt?.Length == 8 ? $"{basDt[..4]}.{basDt[4..6]}.{basDt[6..]}" : basDt;
         string sort = rule == null ? "시총 큰 순" : $"'{rule.Label}' · {SortName(rule)}";
         string hint = rule?.NeedsScreen == true && screenTable == null ? "   ※ 배당·가치 검색은 [가치 분석]을 한 번 실행하면 쓸 수 있어요" : "";
-        lblMarket.Text = $"기준일 {date}  ·  {allRows.Count:N0}종목 중 {found.Count:N0}개  ·  정렬: {sort}{hint}";
+        string refreshed = lastRefresh == default ? "" : $"  ·  {lastRefresh:HH:mm} 갱신 (30분마다)";
+        lblMarket.Text = $"국장 {date} 종가 · 미장 15분 지연 · 환율 {Market.UsdKrw:N1}원  ·  {allRows.Count:N0}종목 중 {found.Count:N0}개  ·  정렬: {sort}{refreshed}{hint}{refreshNote}";
     }
 
     // 숫자가 잘리지 않게 열마다 (머리글, 가장 긴 값) 중 넓은 쪽으로 맞추고, fillColumn이 남는 폭을 채운다
     static readonly Dictionary<string, string> ColFormat = new()
     {
         ["현재가"] = "N0", ["시가총액(억)"] = "N0", ["등락%"] = "+0.00;-0.00;0.00", ["배당%"] = "0.00",
-        ["현재가(원)"] = "N0", ["평가금액"] = "N0", ["주당배당금"] = "N0", ["배당률%"] = "0.00", ["연 배당"] = "N0", ["월 배당"] = "N0", ["수량"] = "N0",
+        ["평가금액(원)"] = "N0", ["주당배당금"] = "N0", ["배당률%"] = "0.00", ["연 배당(원)"] = "N0", ["월 배당(원)"] = "N0", ["수량"] = "N0",
     };
 
     static void FitColumns(DataGridView g, DataTable t, string fillColumn)
@@ -906,7 +938,10 @@ public class MainForm : Form
                 e.CellStyle.SelectionForeColor = e.CellStyle.ForeColor;
                 e.CellStyle.Format = "+0.00;-0.00;0.00";
                 break;
-            case "현재가" or "시가총액(억)":
+            case "현재가":
+                e.CellStyle.Format = (gridMarket.Rows[e.RowIndex].Cells["시장"].Value as string ?? "").StartsWith("미국") ? "$#,##0.00" : "N0";
+                break;
+            case "시가총액(억)":
                 e.CellStyle.Format = "N0";
                 break;
             case "배당%" when e.Value is double d:
@@ -922,29 +957,38 @@ public class MainForm : Form
         }
     }
 
+    static string MarketName(string m) => m switch
+    {
+        "KOSPI" => "코스피", "KOSDAQ" => "코스닥", "US" => "미국", "US ETF" => "미국 ETF", _ => m,
+    };
+
     void ShowDetail()
     {
         if (gridMarket.CurrentRow?.Cells["종목코드"].Value is not string code || !rowByCode.TryGetValue(code, out var r)) return;
         var q = r.Q;
         dName.Text = q.Name;
-        dSub.Text = $"{q.Code}  ·  {(q.Market == "KOSPI" ? "코스피" : "코스닥")}  ·  시총 {r.Rank:0}위";
+        dSub.Text = $"{q.Code}  ·  {MarketName(q.Market)}  ·  시총 {r.Rank:0}위";
         string sign = q.Change > 0 ? "▲" : q.Change < 0 ? "▼" : "";
-        dPrice.Text = $"{q.Price:N0}원   {sign}{Math.Abs(q.Change):N0} ({q.ChangeRate:+0.00;-0.00;0.00}%)";
+        dPrice.Text = q.IsUs
+            ? $"${q.Price:N2}   {sign}{Math.Abs(q.Change):N2} ({q.ChangeRate:+0.00;-0.00;0.00}%)"
+            : $"{q.Price:N0}원   {sign}{Math.Abs(q.Change):N0} ({q.ChangeRate:+0.00;-0.00;0.00}%)";
         dPrice.ForeColor = q.Change > 0 ? Theme.Up : q.Change < 0 ? Theme.Down : Theme.Text;
 
         double? dps = LatestDps(code);
         if (dps > 0 && q.Price > 0)
         {
-            double perTenM = 10_000_000 / q.Price * dps.Value; // 1천만원어치를 산다고 가정
+            double yield = dps.Value / q.Price, tax = Income.Tax(q.Currency);
+            double perTenM = 10_000_000 * yield; // 1천만원어치를 산다고 가정 (환율과 무관)
             dDivCalc.Text = $"1,000만원 투자 시  연 {perTenM:N0}원 · 월 {perTenM / 12:N0}원\r\n" +
-                            $"세후(15.4%)  연 {perTenM * (1 - Income.TaxRate):N0}원 · 월 {perTenM * (1 - Income.TaxRate) / 12:N0}원\r\n" +
-                            $"주당 {dps:N0}원 · 현재가 기준 배당률 {dps / q.Price * 100:0.00}%" +
+                            $"세후({tax * 100:0.#}%)  연 {perTenM * (1 - tax):N0}원 · 월 {perTenM * (1 - tax) / 12:N0}원\r\n" +
+                            (q.IsUs ? $"주당 연 ${dps:N2} · 배당률 {yield * 100:0.00}% (Yahoo)" : $"주당 {dps:N0}원 · 현재가 기준 배당률 {yield * 100:0.00}%") +
                             (MaybeSpecial(code) ? "\r\n⚠ 지난 결산 배당이 평소의 2배 이상 — 일회성 특별배당일 수 있어요" : "");
             dDivCalc.ForeColor = MaybeSpecial(code) ? Color.FromArgb(251, 191, 36) : Theme.Text;
         }
         else
         {
-            dDivCalc.Text = dps == 0 ? "지난 결산에 현금배당이 없었어요." : "배당 정보가 아직 없어요. 담으면 DART에서 찾아봐요.";
+            dDivCalc.Text = q.IsUs ? "배당을 주지 않거나 배당 정보가 없어요."
+                          : dps == 0 ? "지난 결산에 현금배당이 없었어요." : "배당 정보가 아직 없어요. 담으면 DART에서 찾아봐요.";
             dDivCalc.ForeColor = Theme.Muted;
         }
 
@@ -967,7 +1011,8 @@ public class MainForm : Form
 
     // ================= 스크리닝 =================
 
-    async Task RunScreen()
+    // auto = 30분 타이머가 하루 지난 결과를 다시 분석할 때 (오류 창을 띄우지 않는다)
+    async Task RunScreen(bool auto = false)
     {
         if (txtGo.Text.Trim() == "" || txtDart.Text.Trim() == "")
         {
@@ -990,12 +1035,12 @@ public class MainForm : Form
             screenTable = result;
             series = screener.Series;
             (basDt, quotes) = Market.LoadCached();
-            if (quotes != null) RebuildRows();
+            RebuildRows();
         }
         catch (Exception ex)
         {
-            lblStatus.Text = "오류가 났어요. 메시지를 Claude에게 보내주세요.";
-            MessageBox.Show(ex.Message, "오류");
+            lblStatus.Text = auto ? "자동 분석 실패: " + ex.Message.Split('\n')[0] : "오류가 났어요. 메시지를 Claude에게 보내주세요.";
+            if (!auto) MessageBox.Show(ex.Message, "오류");
         }
         finally
         {

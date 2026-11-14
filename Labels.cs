@@ -40,6 +40,8 @@ public static class Labels
         new("우선주", new[] { "우선주" }, r => r.Q.Cap),
         new("코스피", new[] { "코스피", "kospi", "유가증권" }, r => r.Q.Cap),
         new("코스닥", new[] { "코스닥", "kosdaq" }, r => r.Q.Cap),
+        new("미국", new[] { "미국", "미장", "us", "미국주식", "해외", "해외주식" }, r => r.Q.Cap),
+        new("ETF", new[] { "etf", "이티에프" }, r => r.Q.Cap),
     };
 
     // 칩으로 바로 누를 라벨
@@ -94,8 +96,20 @@ public static class Labels
         {
             if (r.Q.ChangeRate >= 5) r.Labels.Add("급등");
             if (r.Q.ChangeRate <= -5) r.Labels.Add("급락");
-            if (!r.Q.Code.EndsWith("0")) r.Labels.Add("우선주");
-            r.Labels.Add(r.Q.Market == "KOSPI" ? "코스피" : "코스닥");
+            if (r.Q.IsUs)
+            {
+                // 미국은 Yahoo 배당률로 배당 라벨만 붙인다 (재무 분석은 국내만)
+                r.Div = r.Q.DivYield;
+                if (r.Div >= 3) r.Labels.Add("고배당");
+                if (r.Div >= 5) r.Labels.Add("초고배당");
+                r.Labels.Add("미국");
+                if (r.Q.Market == "US ETF") r.Labels.Add("ETF");
+            }
+            else
+            {
+                if (!r.Q.Code.EndsWith("0")) r.Labels.Add("우선주");
+                r.Labels.Add(r.Q.Market == "KOSPI" ? "코스피" : "코스닥");
+            }
         }
         return rows;
     }

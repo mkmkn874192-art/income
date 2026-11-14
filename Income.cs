@@ -14,11 +14,15 @@ public class IncomeItem
     public double Price { get; set; }
     public double Dps { get; set; }
     public string Source { get; set; }
+    public string Currency { get; set; } = "KRW"; // Price·Dps의 통화
 }
 
 public static class Income
 {
-    public const double TaxRate = 0.154; // 배당소득세 14% + 지방소득세 1.4%
+    public const double TaxRate = 0.154;   // 국내 배당소득세 14% + 지방소득세 1.4%
+    public const double UsTaxRate = 0.15;  // 미국 배당 원천징수 (한·미 조세조약)
+
+    public static double Tax(string currency) => currency == "USD" ? UsTaxRate : TaxRate;
 
     static string File_ => Path.Combine(Market.Dir, "income.json");
     static string CorpFile => Path.Combine(Market.Dir, "corpcodes.json");

@@ -3,8 +3,15 @@ using System.Text.Json;
 
 namespace KrxScreen;
 
+// Price·Change는 그 나라 통화, TradeValue·Cap은 원화(미국은 환율로 환산)
 public record Quote(string Code, string Name, string Market, double Price, double Change, double ChangeRate,
-                    double TradeValue, double Cap);
+                    double TradeValue, double Cap)
+{
+    public string Currency { get; init; } = "KRW";
+    public double? DivYield { get; init; } // %, 미국만 (국내는 DART 결산에서 계산)
+    public double? Dps { get; init; }      // 연간 주당배당금, 그 나라 통화
+    public bool IsUs => Currency == "USD";
+}
 
 // 종목별 연도 시계열 (스크리닝 때 모아 둔 것)
 public record StockSeries(Dictionary<int, double> NetIncome, Dictionary<int, double> Dps);
@@ -85,6 +92,34 @@ public static class Market
         }
         throw new Exception("시세를 못 받았어요. 키 활성화(승인 후 최대 1시간)를 확인해주세요.\r\n" + lastErr);
     }
+
+    // ----- 미국 (Yahoo) -----
+    public static double UsdKrw = 1300; // 받기 전 임시값, 캐시나 Yahoo에서 덮어쓴다
+    static string UsFile => Path.Combine(Dir, "us_quotes.json");
+    record UsCache(DateTime At, double Fx, List<Quote> Quotes);
+
+    public static async Task<List<Quote>> FetchUs()
+    {
+        var (q, fx) = await Yahoo.Fetch();
+        UsdKrw = fx;
+        Directory.CreateDirectory(Dir);
+        File.WriteAllText(UsFile, JsonSerializer.Serialize(new UsCache(DateTime.Now, fx, q)));
+        return q;
+    }
+
+    public static List<Quote> LoadUsCached()
+    {
+        try
+        {
+            if (!File.Exists(UsFile)) return null;
+            var c = JsonSerializer.Deserialize<UsCache>(File.ReadAllText(UsFile));
+            UsdKrw = c.Fx;
+            return c.Quotes;
+        }
+        catch { return null; }
+    }
+
+    public static double Fx(string currency) => currency == "USD" ? UsdKrw : 1;
 
     public static (string basDt, List<Quote> quotes) LoadCached()
     {

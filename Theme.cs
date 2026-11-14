@@ -346,7 +346,7 @@ class BarSeries : Control
         g.Clear(BackColor);
         if (data == null || data.Count == 0)
         {
-            TextRenderer.DrawText(g, "스크리닝 대상 종목만 있어요", Theme.Small, ClientRectangle, Theme.Muted,
+            TextRenderer.DrawText(g, "국내 가치 분석 종목만 있어요", Theme.Small, ClientRectangle, Theme.Muted,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             return;
         }
