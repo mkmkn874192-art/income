@@ -3,10 +3,10 @@ using System.Text;
 
 namespace KrxScreen;
 
-public class MainForm : Form
+public partial class MainForm : Form
 {
     static readonly string KeyFile = Path.Combine(Market.Dir, "keys.txt");
-    const int PIncome = 0, PCart = 1, PMasters = 2, PPlan = 3, PSim = 4, PMarket = 5, PSector = 6, PScreen = 7, PPortfolio = 8, PLearn = 9, PSettings = 10;
+    const int PIncome = 0, PCart = 1, PMasters = 2, PPlan = 3, PGame = 4, PSim = 5, PMarket = 6, PSector = 7, PScreen = 8, PPortfolio = 9, PLearn = 10, PSettings = 11;
 
     // 제품명은 여기서만 바꾸면 된다
     public const string AppName = "인컴 오디세이";
@@ -159,7 +159,7 @@ public class MainForm : Form
         // 메뉴는 7개 묶음. 겹치는 화면은 한 메뉴 안의 탭으로 (P상수 순서와 같아야 한다)
         AddGroup("", "재정재무", ("배당 수입", BuildIncomePage()), ("생활비 해금", BuildCartPage()));
         AddGroup("", "전략기획실", ("코치진 · 구성 짜기", BuildMastersPage()), ("목표 · 배분 계획", BuildPlanPage()));
-        AddGroup("", "시뮬레이터", ("시뮬레이터", BuildSimPage()));
+        AddGroup("", "시뮬레이터", ("게임 모드", BuildGamePage()), ("과거로 돌려보기", BuildSimPage()));
         AddGroup("", "거래소", ("전체 종목", BuildMarketPage()), ("업종 판도", BuildSectorPage()), ("가치 분석", BuildScreenPage()));
         AddGroup("", "잔고", ("잔고 · 주문", BuildPortfolioPage()));
         AddGroup("", "용어사전", ("용어사전", BuildLearnPage()));
@@ -272,6 +272,7 @@ public class MainForm : Form
         }
         foreach (var (g, _) in pageHosts.DistinctBy(p => p.group)) g.Visible = g == host;
         if (index == PMasters && msStyle == null) AutoPick();
+        if (index == PGame) pages_VisibleHook?.Invoke();
     }
 
     static Panel Page() => new() { BackColor = Theme.Bg, Padding = new Padding(28, 24, 16, 16) };
@@ -1018,7 +1019,8 @@ public class MainForm : Form
         Item("거래소에서 자세히 보기", () => { txtSearch.Text = r.Q.Code; ShowPage(PMarket); return Task.CompletedTask; });
         Item("배당 수입에 담기 (10주)", async () => { ShowPage(PIncome); lblIncome.Text = await AddToIncome(r, 10); });
         Item("전략기획실 · 우리 팀에 추가", async () => { ShowPage(PMasters); await AddMsHolding(r); });
-        Item("시뮬레이터에 추가", () => { AddSimAsset(r); ShowPage(PSim); return Task.CompletedTask; });
+        Item("게임 모드에서 사고팔기", () => { gamePick = r; lblGamePick.ForeColor = Theme.Text; lblGamePick.Text = $"{r.Q.Name} · {Won.Price(r.Q.Price, r.Q.Currency)}"; ShowPage(PGame); return Task.CompletedTask; });
+        Item("과거로 돌려보기에 추가", () => { AddSimAsset(r); ShowPage(PSim); return Task.CompletedTask; });
         menu.Closed += (_, _) => BeginInvoke(menu.Dispose);
         menu.Show(anchor, new Point(0, anchor.Height + 2));
     }
@@ -1888,7 +1890,7 @@ public class MainForm : Form
         page.Controls.Add(row2);
         page.Controls.Add(Theme.Spacer(6));
         page.Controls.Add(row1);
-        page.Controls.Add(Header("시뮬레이터", "이 구성으로 1·3·5·10년 전에 사서 매달 적립했다면 지금 얼마가 됐을지, 실제 과거 가격으로 계산해요."));
+        page.Controls.Add(Header("시뮬레이터 · 과거로 돌려보기", "이 구성으로 1·3·5·10년 전에 사서 매달 적립했다면 지금 얼마가 됐을지, 실제 과거 가격으로 계산해요."));
         return page;
     }
 
