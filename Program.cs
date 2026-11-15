@@ -11,6 +11,19 @@ internal static class Program
         if (args.Length > 0 && args[0] == "--check") return Check().GetAwaiter().GetResult();
 
         ApplicationConfiguration.Initialize();
+        // 처리 못 한 오류는 error.log에 자세히 남기고, 앱은 계속 쓸 수 있게 한다
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
+        Application.ThreadException += (_, e) =>
+        {
+            try
+            {
+                Directory.CreateDirectory(Market.Dir);
+                File.AppendAllText(Path.Combine(Market.Dir, "error.log"), $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {e.Exception}{Environment.NewLine}{Environment.NewLine}");
+            }
+            catch { } // 기록 실패는 무시
+            MessageBox.Show($"문제가 생겼어요: {e.Exception.Message}\n\n자세한 내용은 {Path.Combine(Market.Dir, "error.log")}에 저장했어요. 앱은 계속 쓸 수 있어요.",
+                            MainForm.AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        };
         Application.Run(new MainForm());
         return 0;
     }

@@ -5,7 +5,10 @@ namespace KrxScreen;
 public static class Masters
 {
     public record Holding(string Code, string Name, double Weight, string Proxy, bool Bond, string Why);
-    public record Style(string Key, string Who, string Name, string Line, string Idea, string Caution, bool Picks);
+    public record Style(string Key, string Who, string Name, string Line, string Idea, string Caution, bool Picks)
+    {
+        public override string ToString() => Who; // 선택 상자에는 이름만
+    }
 
     // 국내 상장 ETF (코드·이름은 Yahoo에서 확인한 것). Proxy = 상장 전 기간을 대신할 미국 ETF.
     static Holding Etf(string code, double w, string why) => code switch

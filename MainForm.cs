@@ -132,8 +132,10 @@ public class MainForm : Form
         gridMarket.CellFormatting += GridMarket_CellFormatting;
         gridMarket.SelectionChanged += (_, _) => ShowDetail();
         foreach (var g in new[] { gridSum, gridHold, gridPlan }) g.DataBindingComplete += (s, _) => FormatNumbers((DataGridView)s);
-        foreach (var g in new[] { grid, gridMarket, gridSum, gridHold, gridPlan, gridIncome, gridCombo, gridYears, gridSectors, gridSectorStocks })
+        foreach (var g in new[] { grid, gridMarket, gridSum, gridHold, gridPlan, gridIncome, gridCombo, gridYears, gridSectors, gridSectorStocks,
+                                  gridMsHold, gridMsCompare, gridSimAssets, gridSimPeriods, gridSimAmounts })
         {
+            g.DataBindingComplete += (s, _) => KeepNamesWhole((DataGridView)s);
             g.DataBindingComplete += (s, _) => AddHeaderTips((DataGridView)s);
             g.ColumnHeaderMouseClick += (s, e) =>
             {
@@ -1092,7 +1094,9 @@ public class MainForm : Form
         gridMsHold.Dock = DockStyle.Fill;
         holdBody.Controls.Add(gridMsHold);
         holdBody.Controls.Add(Theme.Spacer(6));
-        holdBody.Controls.Add(Toolbar(msPicker, btnMsRemove));
+        var msTools = Toolbar(msPicker, btnMsRemove);
+        msTools.BackColor = Theme.CardBg;
+        holdBody.Controls.Add(msTools);
         right.Controls.Add(new Card("구성 · 시작 금액 기준 수량 (시뮬레이터와 연결)", holdBody), 0, 1);
         right.Controls.Add(bottom, 0, 2);
 
@@ -1416,7 +1420,6 @@ public class MainForm : Form
         };
         btnSimRun.Click += async (_, _) => await RunSim();
         Theme.StyleInput(cmbSimStyle);
-        cmbSimStyle.Format += (_, e) => { if (e.ListItem is Masters.Style st) e.Value = $"{st.Who} · {st.Name}"; };
         foreach (var st in Masters.All) cmbSimStyle.Items.Add(st);
         cmbSimStyle.SelectedIndexChanged += (_, _) =>
         {
@@ -1477,14 +1480,16 @@ public class MainForm : Form
         right.Controls.Add(bottom, 0, 2);
 
         var body = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Margin = Padding.Empty };
-        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24));
-        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 76));
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 28));
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 72));
         var assetBody = new Panel { Dock = DockStyle.Fill };
         gridSimAssets.Dock = DockStyle.Fill;
         simPicker.Dock = DockStyle.Top;
         assetBody.Controls.Add(gridSimAssets);
         assetBody.Controls.Add(Theme.Spacer(6));
-        assetBody.Controls.Add(Toolbar(btnSimRemove, Theme.Text_("비중(%) 칸은 직접 고칠 수 있어요", Theme.Small, Theme.Muted)));
+        var simTools = Toolbar(btnSimRemove, Theme.Text_("비중(%) 칸은 직접 고칠 수 있어요", Theme.Small, Theme.Muted));
+        simTools.BackColor = Theme.CardBg;
+        assetBody.Controls.Add(simTools);
         assetBody.Controls.Add(Theme.Spacer(6));
         assetBody.Controls.Add(simPicker);
         body.Controls.Add(new Card("구성", assetBody), 0, 0);
@@ -2345,6 +2350,25 @@ public class MainForm : Form
         ["평가금액(원)"] = "N0", ["주당배당금"] = "N0", ["배당률%"] = "0.00", ["연 배당(원)"] = "N0", ["월 배당(원)"] = "N0", ["수량"] = "N0",
     };
 
+    // 이름 열은 어느 표에서든 잘리지 않게: 가장 긴 이름이 들어갈 만큼 최소 폭을 준다 (표가 좁으면 가로 스크롤)
+    static readonly HashSet<string> NameCols = new() { "종목", "종목명", "방식", "업종" };
+
+    static int NeedWidth(DataGridView g, DataGridViewColumn c)
+    {
+        string longest = c.HeaderText;
+        foreach (DataGridViewRow r in g.Rows)
+            if (r.Cells[c.Index].Value is string v && v.Length > longest.Length) longest = v;
+        const TextFormatFlags f = TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine; // "S&P" 같은 글자가 줄어들지 않게
+        return TextRenderer.MeasureText(longest, Theme.Bold, Size.Empty, f).Width + (int)(28 * g.DeviceDpi / 96f);
+    }
+
+    static void KeepNamesWhole(DataGridView g)
+    {
+        _ = g.Handle; // 숨겨진 화면의 표는 핸들이 없으면 MinimumWidth 설정에서 오류가 난다
+        foreach (DataGridViewColumn c in g.Columns)
+            if (NameCols.Contains(c.Name)) c.MinimumWidth = Math.Max(c.MinimumWidth, NeedWidth(g, c));
+    }
+
     static void FitColumns(DataGridView g, DataTable t, string fillColumn)
     {
         _ = g.Handle; // 숨겨진 페이지의 표도 핸들을 먼저 만든다 (없으면 MinimumWidth 설정이 실패)
@@ -2356,7 +2380,7 @@ public class MainForm : Form
             if (c.ValueType == typeof(double) || c.ValueType == typeof(int)) c.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleRight;
             if (c.Name == fillColumn)
             {
-                c.MinimumWidth = (int)(130 * s);
+                c.MinimumWidth = Math.Max((int)(130 * s), NameCols.Contains(c.Name) ? NeedWidth(g, c) : 0);
                 c.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
                 continue;
             }
@@ -2369,7 +2393,8 @@ public class MainForm : Form
                 if (txt.Length > longest.Length) longest = txt;
             }
             c.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
-            c.Width = Math.Max(TextRenderer.MeasureText(longest, Theme.Bold).Width, TextRenderer.MeasureText(c.HeaderText, Theme.Bold).Width) + pad;
+            c.Width = NameCols.Contains(c.Name) ? NeedWidth(g, c)
+                : Math.Max(TextRenderer.MeasureText(longest, Theme.Bold).Width, TextRenderer.MeasureText(c.HeaderText, Theme.Bold).Width) + pad;
         }
     }
 
