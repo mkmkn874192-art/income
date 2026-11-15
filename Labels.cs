@@ -10,6 +10,13 @@ public class StockRow
     public int? Score, DivYears;
     public readonly List<string> Labels = new();
     public double Rank; // 시장 내 시총 순위
+
+    // 종합 점수 계산 결과 (MainForm.ScoreRows에서 채움)
+    public double? Yield;      // 현재가 기준 배당률 %
+    public DivInfo DivI;       // 배당 주기·안정성
+    public SectorStat Sec;     // 속한 업종 통계
+    public double? Total;      // 종합 점수 0~100
+    public string ScoreNote;
 }
 
 // 라벨 부여와 검색어 해석
@@ -40,6 +47,12 @@ public static class Labels
         new("우선주", new[] { "우선주" }, r => r.Q.Cap),
         new("코스피", new[] { "코스피", "kospi", "유가증권" }, r => r.Q.Cap),
         new("코스닥", new[] { "코스닥", "kosdaq" }, r => r.Q.Cap),
+        new("종합점수", new[] { "종합점수", "종합", "추천", "점수순" }, r => r.Total),
+        new("월배당", new[] { "월배당", "매달배당", "월배당주" }, r => r.Total),
+        new("분기배당", new[] { "분기배당", "분기배당주" }, r => r.Total),
+        new("배당안정", new[] { "배당안정", "안정배당", "배당안정성", "배당귀족주" }, r => r.Total),
+        new("낙폭과대", new[] { "낙폭과대", "많이내린", "고점대비하락", "저점", "낙폭" }, r => r.Q.FromHigh, Asc: true),
+        new("고점근처", new[] { "고점근처", "신고가", "고점" }, r => r.Q.FromHigh),
         new("미국", new[] { "미국", "미장", "us", "미국주식", "해외", "해외주식" }, r => r.Q.Cap),
         new("ETF", new[] { "etf", "이티에프" }, r => r.Q.Cap),
     };
@@ -48,6 +61,24 @@ public static class Labels
     public static readonly string[] Chips = { "고배당", "꾸준배당", "가치주", "저PBR", "고ROE", "성장주", "대형주", "급등", "급락", "거래대금 상위" };
 
     static string Norm(string s) => s.Replace(" ", "").ToLowerInvariant();
+
+    // 종합 점수 계산 뒤에 붙이는 라벨 (배당 주기·안정성·고점 대비)
+    public static void Enrich(StockRow r)
+    {
+        void Add(string l) { if (!r.Labels.Contains(l)) r.Labels.Add(l); } // 다시 불려도 중복되지 않게
+        if (r.Total != null) Add("종합점수");
+        if (r.DivI?.Freq == "월") Add("월배당");
+        if (r.DivI?.Freq == "분기") Add("분기배당");
+        if (IsStable(r)) Add("배당안정");
+        if (r.Q.FromHigh <= -30) Add("낙폭과대");
+        if (r.Q.FromHigh >= -5) Add("고점근처");
+    }
+
+    // 배당 안정: 5년 이상 연속 배당, 최근 5년 삭감 없음, 특별배당 아님 (기록이 없으면 국장 가치 분석의 배당 연수·무적자로)
+    public static bool IsStable(StockRow r) =>
+        r.DivI != null && r.DivI.Freq != "없음"
+            ? r.DivI.Years >= 5 && r.DivI.Cuts == 0 && !r.DivI.Special
+            : r.DivYears >= 10 && r.Labels.Contains("무적자");
 
     public static Rule Find(string token)
     {

@@ -403,6 +403,82 @@ class PriceChart : Control
     }
 }
 
+// 시뮬레이터: 평가금액(선+채움)과 넣은 원금(점선). 마우스를 올리면 그 달 값.
+class SimChart : Control
+{
+    List<Backtest.Point> pts;
+    int hover = -1;
+
+    public SimChart()
+    {
+        SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
+        BackColor = Theme.CardBg;
+        MouseMove += (_, e) =>
+        {
+            if (pts == null || pts.Count < 2) return;
+            int i = Math.Clamp((int)Math.Round((e.X - 8.0) / Math.Max(1, Width - 16) * (pts.Count - 1)), 0, pts.Count - 1);
+            if (i != hover) { hover = i; Invalidate(); }
+        };
+        MouseLeave += (_, _) => { hover = -1; Invalidate(); };
+    }
+
+    public void SetData(List<Backtest.Point> p) { pts = p; hover = -1; Invalidate(); }
+
+    static string Won(double v) => v >= 1e8 ? $"{v / 1e8:0.00}억" : $"{v / 1e4:N0}만";
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.Clear(BackColor);
+        if (pts == null || pts.Count < 2)
+        {
+            TextRenderer.DrawText(g, "구성을 넣고 [시뮬레이션 실행]을 누르세요", Theme.Small, ClientRectangle, Theme.Muted,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            return;
+        }
+        float s = DeviceDpi / 96f, top = 22 * s, bottom = Height - 20 * s, left = 8, right = Width - 8;
+        double max = pts.Max(p => Math.Max(p.Value + p.DivCash, p.Principal)) * 1.05, min = 0;
+        PointF P(int i, double v) => new(left + (right - left) * i / (pts.Count - 1), bottom - (float)((v - min) / (max - min)) * (bottom - top));
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+
+        var val = Enumerable.Range(0, pts.Count).Select(i => P(i, pts[i].Value + pts[i].DivCash)).ToArray();
+        var color = pts[^1].Value + pts[^1].DivCash >= pts[^1].Principal ? Theme.Up : Theme.Down;
+        using (var area = new GraphicsPath())
+        {
+            area.AddLines(val);
+            area.AddLine(val[^1], new PointF(right, bottom));
+            area.AddLine(new PointF(right, bottom), new PointF(left, bottom));
+            area.CloseFigure();
+            using var fill = new LinearGradientBrush(new RectangleF(0, top, Width, bottom - top + 1), Color.FromArgb(60, color), Color.FromArgb(0, color), 90f);
+            g.FillPath(fill, area);
+        }
+        using (var pen = new Pen(color, 2f * s)) g.DrawLines(pen, val);
+        using (var dash = new Pen(Theme.Muted, 1.5f * s) { DashStyle = DashStyle.Dash })
+            g.DrawLines(dash, Enumerable.Range(0, pts.Count).Select(i => P(i, pts[i].Principal)).ToArray());
+
+        TextRenderer.DrawText(g, "━ 평가금액(받은 배당 포함)   ┅ 넣은 원금", Theme.Small, new Point(0, 0), Theme.Muted);
+        TextRenderer.DrawText(g, pts[0].Month.ToString("yyyy.MM"), Theme.Small, new Point((int)left, (int)(bottom + 2 * s)), Theme.Muted);
+        TextRenderer.DrawText(g, pts[^1].Month.ToString("yyyy.MM"), Theme.Small, new Rectangle(0, (int)(bottom + 2 * s), (int)right, (int)(16 * s)), Theme.Muted, TextFormatFlags.Right);
+        TextRenderer.DrawText(g, Won(max / 1.05), Theme.Small, new Rectangle(0, 0, (int)right, (int)(16 * s)), Theme.Muted, TextFormatFlags.Right);
+
+        if (hover >= 0)
+        {
+            var hp = P(hover, pts[hover].Value + pts[hover].DivCash);
+            using var line = new Pen(Color.FromArgb(120, Theme.Text)) { DashStyle = DashStyle.Dot };
+            g.DrawLine(line, hp.X, top, hp.X, bottom);
+            using var dot = new SolidBrush(color);
+            g.FillEllipse(dot, hp.X - 4 * s, hp.Y - 4 * s, 8 * s, 8 * s);
+            var p = pts[hover];
+            string tip = $"{p.Month:yyyy.MM}  평가 {Won(p.Value + p.DivCash)}원 · 원금 {Won(p.Principal)}원 · {(p.Value + p.DivCash) / Math.Max(1, p.Principal) * 100 - 100:+0.0;-0.0}%";
+            var size = TextRenderer.MeasureText(tip, Theme.Small);
+            float tx = Math.Clamp(hp.X - size.Width / 2f, 0, Width - size.Width);
+            using var bg = new SolidBrush(Theme.InputBg);
+            g.FillRectangle(bg, tx - 4, top - 2, size.Width + 8, size.Height + 4);
+            TextRenderer.DrawText(g, tip, Theme.Small, new Point((int)tx, (int)top), Theme.Text);
+        }
+    }
+}
+
 // 연도별 막대 (순이익·배당 추이). 음수는 빨강.
 class BarSeries : Control
 {

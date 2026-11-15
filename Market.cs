@@ -11,6 +11,13 @@ public record Quote(string Code, string Name, string Market, double Price, doubl
     public double? DivYield { get; init; } // %, 미국만 (국내는 DART 결산에서 계산)
     public double? Dps { get; init; }      // 연간 주당배당금, 그 나라 통화
     public bool IsUs => Currency == "USD";
+
+    // Yahoo에서 덧붙이는 업종·추세 (모두 %). 국장은 KrTrends로 채운다.
+    public string Sector { get; init; }
+    public double? Chg1y { get; init; }
+    public double? Vs50 { get; init; }
+    public double? Vs200 { get; init; }
+    public double? FromHigh { get; init; }
 }
 
 // 종목별 연도 시계열 (스크리닝 때 모아 둔 것)
@@ -120,6 +127,28 @@ public static class Market
     }
 
     public static double Fx(string currency) => currency == "USD" ? UsdKrw : 1;
+
+    // ----- 국장 업종·추세 (Yahoo) -----
+    static string KrTrendFile => Path.Combine(Dir, "kr_trends.json");
+
+    public static async Task<Dictionary<string, Yahoo.Trend>> FetchKrTrends()
+    {
+        var t = await Yahoo.KrTrends();
+        Directory.CreateDirectory(Dir);
+        File.WriteAllText(KrTrendFile, JsonSerializer.Serialize(t));
+        return t;
+    }
+
+    public static Dictionary<string, Yahoo.Trend> LoadKrTrends()
+    {
+        try { return File.Exists(KrTrendFile) ? JsonSerializer.Deserialize<Dictionary<string, Yahoo.Trend>>(File.ReadAllText(KrTrendFile)) : null; }
+        catch { return null; }
+    }
+
+    public static List<Quote> WithTrends(List<Quote> kr, Dictionary<string, Yahoo.Trend> t) =>
+        kr == null || t == null ? kr : kr.Select(q => t.TryGetValue(q.Code, out var x)
+            ? q with { Sector = x.Sector, Chg1y = x.Chg1y, Vs50 = x.Vs50, Vs200 = x.Vs200, FromHigh = x.FromHigh }
+            : q).ToList();
 
     public static (string basDt, List<Quote> quotes) LoadCached()
     {
