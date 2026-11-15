@@ -76,7 +76,7 @@ class TermPopup : Form
     readonly Label term = new() { Dock = DockStyle.Top, Height = 22, Font = Theme.Small, ForeColor = Theme.Muted, AutoEllipsis = true };
     readonly Label summary = new() { Dock = DockStyle.Top, Height = 52, Font = Theme.Bold, ForeColor = Color.FromArgb(96, 165, 250) };
     readonly TermText body = new() { Dock = DockStyle.Fill };
-    readonly Button full = Theme.Secondary("아카데미에서 전체 보기");
+    readonly Button full = Theme.Secondary("자료실에서 전체 보기");
     Glossary.Entry entry;
     Action<Glossary.Entry> openFull;
 

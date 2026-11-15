@@ -184,7 +184,7 @@ public static class Masters
         List<Holding> Stocks(List<StockRow> picks, double share, Func<StockRow, string> why, int want)
         {
             var h = new List<Holding>();
-            if (kr.Count == 0) notes.Add("[이적시장 › 스카우트]을 아직 안 돌려서 종목을 고를 수 없어요. 주식 몫은 KODEX 200으로 채웠어요.");
+            if (kr.Count == 0) notes.Add("[거래소 › 가치 분석]을 아직 안 돌려서 종목을 고를 수 없어요. 주식 몫은 KODEX 200으로 채웠어요.");
             else if (picks.Count < want) notes.Add($"조건을 통과한 종목이 {picks.Count}개뿐이라 " + (picks.Count == 0 ? "주식 몫은 KODEX 200으로 채웠어요." : "그만큼만 담았어요."));
             if (picks.Count == 0) { h.Add(Etf("069500", share, "조건에 맞는 종목이 없어 한국 대표 지수로 대신")); return h; }
             foreach (var r in picks) h.Add(new(r.Q.Code, r.Q.Name, share / picks.Count, null, false, why(r)));
@@ -199,7 +199,7 @@ public static class Masters
                 list.Add(Etf("114260", Portfolio.Target[0], "흔들림을 줄이는 국고채"));
                 list.Add(Etf("360750", Portfolio.Target[1], "미국 대표 기업 500개"));
                 list.Add(Etf("458730", Portfolio.Target[2], "10년 넘게 배당한 미국 회사 100개, 매달 분배"));
-                if (incomePicks.Count == 0) { list.Add(Etf("458730", Portfolio.Target[3], "")); notes.Add("[이적시장 › 스카우트] 결과가 없어 개별주 몫을 배당 ETF에 더했어요."); }
+                if (incomePicks.Count == 0) { list.Add(Etf("458730", Portfolio.Target[3], "")); notes.Add("[거래소 › 가치 분석] 결과가 없어 개별주 몫을 배당 ETF에 더했어요."); }
                 else foreach (var r in incomePicks)
                     list.Add(new(r.Q.Code, r.Q.Name, Portfolio.Target[3] / incomePicks.Count, null, false, $"배당 {r.Div:0.0}% · 3년 PER {r.Per3:0.0}"));
                 break;
