@@ -104,6 +104,7 @@ public partial class MainForm : Form
     // ----- 레이아웃 -----
     readonly Panel content = new() { Dock = DockStyle.Fill, BackColor = Theme.Bg };
     readonly List<(NavItem nav, Control page)> pages = new();
+    readonly ProfileCard profileCard = new();
     readonly Label modeBadge = new() { Dock = DockStyle.Bottom, Height = 48, TextAlign = ContentAlignment.MiddleCenter, Font = Theme.Bold };
 
     public MainForm()
@@ -123,6 +124,7 @@ public partial class MainForm : Form
         BackColor = Theme.Bg;
         ForeColor = Theme.Text;
         Theme.DarkTitleBar(this);
+        if (Theme.AppIcon != null) Icon = Theme.AppIcon;
 
         foreach (var g in new[] { grid, gridMarket, gridSum, gridHold, gridPlan }) Theme.StyleGrid(g);
         foreach (Control c in new Control[] { txtGo, txtDart, txtAppKey, txtSecret, txtEcos, numPrice, numCap, rdoMock, rdoReal, numAddQty }) Theme.StyleInput(c);
@@ -157,11 +159,14 @@ public partial class MainForm : Form
         Controls.Add(content);
         Controls.Add(BuildSidebar());
         // 메뉴는 7개 묶음. 겹치는 화면은 한 메뉴 안의 탭으로 (P상수 순서와 같아야 한다)
+        AddSection("운영");
         AddGroup("", "재정재무", ("배당 수입", BuildIncomePage()), ("생활비 해금", BuildCartPage()));
         AddGroup("", "전략기획실", ("코치진 · 구성 짜기", BuildMastersPage()), ("목표 · 배분 계획", BuildPlanPage()));
         AddGroup("", "시뮬레이터", ("게임 모드", BuildGamePage()), ("과거로 돌려보기", BuildSimPage()));
+        AddSection("시장");
         AddGroup("", "거래소", ("전체 종목", BuildMarketPage()), ("업종 판도", BuildSectorPage()), ("가치 분석", BuildScreenPage()));
         AddGroup("", "잔고", ("잔고 · 주문", BuildPortfolioPage()));
+        AddSection("도움");
         AddGroup("", "용어사전", ("용어사전", BuildLearnPage()));
         AddGroup("", "설정", ("설정", BuildSettingsPage()));
 
@@ -212,6 +217,9 @@ public partial class MainForm : Form
         picker.Picked += r => OnGlobalPick(r, picker);
         find.Controls.Add(picker);
         side.Controls.Add(navPanel);
+        // 내 정보: 어느 화면에서든 눌러서 연봉·생활비·대출·예적금을 바꾼다
+        profileCard.Click += (_, _) => { ShowPage(PGame); OpenGameSetup(); };
+        side.Controls.Add(profileCard);
         side.Controls.Add(modeBadge);
         side.Controls.Add(find);
         side.Controls.Add(logo);
@@ -219,7 +227,14 @@ public partial class MainForm : Form
     }
 
     // 메뉴 하나 = 묶음(group). 화면이 둘 이상이면 위에 탭을 둔다. 메뉴를 누르면 그 묶음에서 마지막으로 본 탭이 열린다.
-    readonly List<(Panel group, Pill tab)> pageHosts = new();
+    readonly List<(Panel group, TabItem tab)> pageHosts = new();
+
+    void AddSection(string title)
+    {
+        var sec = new NavSection(title);
+        navPanel.Controls.Add(sec);
+        sec.BringToFront();
+    }
     readonly Dictionary<Panel, int> lastTab = new();
 
     void AddGroup(string glyph, string title, params (string tab, Control page)[] subs)
@@ -234,7 +249,8 @@ public partial class MainForm : Form
         FlowLayoutPanel tabs = null;
         if (subs.Length > 1)
         {
-            tabs = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(28, 14, 16, 0), BackColor = Theme.Bg };
+            tabs = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(22, 10, 16, 0), BackColor = Theme.Bg, WrapContents = false };
+            group.Controls.Add(new Panel { Dock = DockStyle.Top, Height = 1, BackColor = Theme.Border }); // 탭 아래 구분선
             group.Controls.Add(tabs);
         }
         for (int k = 0; k < subs.Length; k++)
@@ -245,11 +261,10 @@ public partial class MainForm : Form
             page.Visible = false;
             group.Controls.Add(page);
             page.BringToFront(); // 탭 줄 아래를 채운다
-            Pill tab = null;
+            TabItem tab = null;
             if (tabs != null)
             {
-                tab = new Pill(tabText, Theme.Text, clickable: true) { Font = Theme.Bold, Margin = new Padding(0, 0, 8, 0) };
-                tab.Size = tab.GetPreferredSize(Size.Empty);
+                tab = new TabItem(tabText);
                 tab.Click += (_, _) => ShowPage(index);
                 tabs.Controls.Add(tab);
             }
@@ -268,7 +283,7 @@ public partial class MainForm : Form
             bool on = i == index, groupOn = pageHosts[i].group == host;
             pages[i].page.Visible = on;
             pages[i].nav.Active = groupOn;
-            if (pageHosts[i].tab is { } t) { t.Selected = on; t.Invalidate(); }
+            if (pageHosts[i].tab is { } t) t.Selected = on;
         }
         foreach (var (g, _) in pageHosts.DistinctBy(p => p.group)) g.Visible = g == host;
         if (index == PMasters && msStyle == null) AutoPick();

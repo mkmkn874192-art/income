@@ -9,6 +9,22 @@ internal static class Program
         if (args.Length > 0 && args[0] == "--analyze") return Analyze().GetAwaiter().GetResult();
         // 데이터 연결 점검 (Yahoo·한국은행·배당 기록이 받아지는지)
         if (args.Length > 0 && args[0] == "--check") return Check().GetAwaiter().GetResult();
+        // 월급 계산 점검: 연봉별 4대 보험·소득세·실수령 (간이세액표와 비교할 때)
+        if (args.Length > 0 && args[0] == "--tax")
+        {
+            int fam = args.Length > 1 && int.TryParse(args[1], out var f) ? f : 1;
+            // 간이세액표 공식 예시와 대조 (월급여액 → 소득세, 1명)
+            foreach (var (pay, exp) in new[] { (2_000_000, 19_520), (3_000_000, 74_350), (4_000_000, 195_960), (5_000_000, 335_470), (6_000_000, 505_900), (8_000_000, 959_500), (10_000_000, 1_507_400) })
+                Console.WriteLine($"check {pay,11:N0} -> {KrTax.WithholdingTax(pay, 1),10:N0}  expected {exp,10:N0}  {(KrTax.WithholdingTax(pay, 1) == exp ? "OK" : "MISMATCH")}");
+            Console.WriteLine($"check 3,500,000 4인 자녀2 (2026.3~) -> {KrTax.WithholdingTax(3_500_000, 4, 2, new DateTime(2026, 6, 1)):N0}  expected 3,510");
+            Console.WriteLine($"부양가족 {fam}명 · 연봉 → 월급, 국민연금, 건강, 장기요양, 고용, 소득세, 지방세, 실수령 (비과세 식대 20만원 포함)");
+            foreach (var sal in new[] { 24e6, 26.4e6, 36e6, 38.4e6, 48e6, 50.4e6, 60e6, 62.4e6, 74.4e6, 98.4e6, 122.4e6, 150e6 })
+            {
+                var p = KrTax.Monthly(sal, fam);
+                Console.WriteLine($"{sal / 1e4,6:N0}만  {p.Gross,10:N0} {p.Pension,9:N0} {p.Health,9:N0} {p.Ltc,8:N0} {p.Employment,8:N0} {p.IncomeTax,9:N0} {p.LocalTax,8:N0} {p.Net,11:N0}");
+            }
+            return 0;
+        }
 
         ApplicationConfiguration.Initialize();
         // 처리 못 한 오류는 error.log에 자세히 남기고, 앱은 계속 쓸 수 있게 한다

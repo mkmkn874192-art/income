@@ -18,6 +18,8 @@ public partial class MainForm
     readonly Panel gameStartPanel = new() { Dock = DockStyle.Top, Height = 470 }, gameMainPanel = new() { Dock = DockStyle.Fill };
     readonly NumericUpDown numSalary = new() { Minimum = 0, Maximum = 10_000_000, Increment = 100, Width = 100, ThousandsSeparator = true };
     readonly NumericUpDown numLiving = new() { Minimum = 0, Maximum = 100_000, Increment = 10, Width = 80, ThousandsSeparator = true };
+    readonly NumericUpDown numFamily = new() { Minimum = 1, Maximum = 11, Value = 1, Width = 50 };
+    readonly NumericUpDown numKids = new() { Minimum = 0, Maximum = 10, Value = 0, Width = 50 };
     readonly NumericUpDown numRaise = new() { Minimum = 0, Maximum = 30, DecimalPlaces = 1, Increment = 0.5m, Value = 3, Width = 60 };
     readonly CheckBox chkSalaryPack = new() { AutoSize = true }, chkBankPack = new() { AutoSize = true };
     readonly ComboBox cmbItemKind = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 80 };
@@ -126,11 +128,19 @@ public partial class MainForm
 
     Action pages_VisibleHook;
 
+    void UpdateProfileCard(double netWorth, double seasonReturn)
+    {
+        var st = Game.S;
+        if (!st.Started) { profileCard.Set("게임을 시작하면 순자산이 보여요", "눌러서 내 정보 설정", null); return; }
+        string l2 = $"Lv.{GameMissions.Level(st)} · " + (GamePacks.On("salary") ? $"연봉 {Krw(st.Salary)}" : $"매달 {Krw(GamePacks.PreviewFlow())} 투자");
+        profileCard.Set($"순자산 {Krw(netWorth)}", l2, Game.Grade(seasonReturn));
+    }
+
     // 내 정보 (첫 시작 전 1회 초기 설정, 이후 [내 정보]로 언제든 바꾸기)
     // 시드머니(새 게임만), 매달 투자금, 확장팩(연봉·생활비 / 대출·적금·예금)
     Control BuildGameSetup()
     {
-        foreach (Control c in new Control[] { numSalary, numLiving, numRaise, cmbItemKind, txtItemName, numItemAmt, numItemRate, numItemPay, numItemMonths }) Theme.StyleInput(c);
+        foreach (Control c in new Control[] { numSalary, numLiving, numRaise, numFamily, numKids, cmbItemKind, txtItemName, numItemAmt, numItemRate, numItemPay, numItemMonths }) Theme.StyleInput(c);
         lstGameItems.BackColor = Theme.InputBg; lstGameItems.ForeColor = Theme.Text; lstGameItems.Font = Theme.Body;
         var packs = GamePacks.All.ToDictionary(p => p.Key);
         chkSalaryPack.Text = $"확장팩 · {packs["salary"].Name}"; chkBankPack.Text = $"확장팩 · {packs["bank"].Name}";
@@ -144,7 +154,8 @@ public partial class MainForm
         void Sync()
         {
             numGameMonthly.Enabled = !chkSalaryPack.Checked;
-            foreach (Control c in new Control[] { numSalary, numLiving, numRaise }) c.Enabled = chkSalaryPack.Checked;
+            foreach (Control c in new Control[] { numSalary, numLiving, numRaise, numFamily, numKids }) c.Enabled = chkSalaryPack.Checked;
+            numKids.Maximum = Math.Max(0, numFamily.Value - 1);
             foreach (Control c in new Control[] { cmbItemKind, txtItemName, numItemAmt, numItemRate, numItemPay, numItemMonths, lstGameItems }) c.Enabled = chkBankPack.Checked;
             string kind = cmbItemKind.SelectedItem as string;
             lblAmtUnit.Text = kind switch { "대출" => "만원 남은 빚", "적금" => "만원 매달 넣기", _ => "만원 맡긴 돈" };
@@ -153,15 +164,16 @@ public partial class MainForm
             lstGameItems.Items.Clear();
             foreach (var i in setupItems) lstGameItems.Items.Add(i.Line());
             // 미리 보기
-            double take = Game.TakeHome((double)numSalary.Value * 1e4), living = (double)numLiving.Value * 1e4;
+            var pay = KrTax.Monthly((double)numSalary.Value * 1e4, (int)numFamily.Value, kids: (int)numKids.Value);
+            double take = pay.Net, living = (double)numLiving.Value * 1e4;
             double flow = chkSalaryPack.Checked ? take - living : (double)numGameMonthly.Value * 1e4;
             if (chkBankPack.Checked && chkSalaryPack.Checked)
                 flow -= setupItems.Where(i => !i.Done && i.Kind != "예금").Sum(i => i.Monthly);
             lblGameFlow.ForeColor = flow >= 0 ? Theme.Good : Theme.Bad;
-            lblGameFlow.Text = (chkSalaryPack.Checked ? $"월 실수령 약 {Krw(take)} − 생활비 {Krw(living)}" + (chkBankPack.Checked ? " − 대출 상환·적금 납입" : "") + " = " : "")
+            lblGameFlow.Text = (chkSalaryPack.Checked ? $"월급 {Krw(pay.Gross)} − 4대 보험 {Krw(pay.Pension + pay.Health + pay.Ltc + pay.Employment)} − 소득세 {Krw(pay.IncomeTax + pay.LocalTax)} = 실수령 {Krw(take)} − 생활비 {Krw(living)}" + (chkBankPack.Checked ? " − 대출 상환·적금 납입" : "") + " = " : "")
                                + $"매달 투자 계좌로 {(flow >= 0 ? "" : "−")}{Krw(Math.Abs(flow))}" + (flow < 0 ? "  (적자예요. 생활비나 상환액을 줄여 보세요)" : "");
         }
-        foreach (var n in new[] { numSalary, numLiving, numGameMonthly }) n.ValueChanged += (_, _) => Sync();
+        foreach (var n in new[] { numSalary, numLiving, numGameMonthly, numFamily, numKids }) n.ValueChanged += (_, _) => Sync();
         chkSalaryPack.CheckedChanged += (_, _) => Sync();
         chkBankPack.CheckedChanged += (_, _) => Sync();
         cmbItemKind.SelectedIndexChanged += (_, _) => Sync();
@@ -193,7 +205,7 @@ public partial class MainForm
             if (chkBankPack.Checked) packsOn.Add("bank");
             if (chkSalaryPack.Checked && numSalary.Value <= 0) { lblSetupNote.ForeColor = Theme.Bad; lblSetupNote.Text = "연봉·생활비 팩을 켰다면 연봉을 넣어 주세요."; return; }
             var f = new Game.Finance((double)numGameMonthly.Value * 1e4, packsOn, (double)numSalary.Value * 1e4, (double)numLiving.Value * 1e4,
-                                     (double)numRaise.Value / 100, setupItems.Select(Clone).ToList());
+                                     (double)numRaise.Value / 100, setupItems.Select(Clone).ToList(), (int)numFamily.Value, (int)numKids.Value);
             if (!Game.S.Started)
             {
                 if (numGameSeed.Value <= 0) { lblSetupNote.ForeColor = Theme.Bad; lblSetupNote.Text = "시드머니를 넣어 주세요. 지금 실제로 투자에 쓸 수 있는 금액을 넣으면 가장 실감 나요."; return; }
@@ -213,8 +225,8 @@ public partial class MainForm
         {
             Note("처음 한 번 설정하고 시작해요. 나중에도 [내 정보]에서 언제든 바꿀 수 있어요. 앱을 꺼 둬도 시간은 흘러서, 다시 켜면 그사이 월급·배당·이자·만기·예약 주문을 처리해요."),
             Row(Theme.Text_("시드머니", Theme.Bold), numGameSeed, Theme.Text_("만원 (내가 정해요)      매달 투자금", Theme.Bold), numGameMonthly, Theme.Text_("만원 (연봉 팩을 끄면 이 금액)")),
-            Row(chkSalaryPack, Theme.Text_("   연봉(세전)"), numSalary, Theme.Text_("만원   월 생활비"), numLiving, Theme.Text_("만원   해마다 1월 인상"), numRaise, Theme.Text_("%")),
-            Note("   " + packs["salary"].Desc + " 실수령은 대략값이에요 (4대 보험·소득세, 부양가족 1명 기준)."),
+            Row(chkSalaryPack, Theme.Text_("   연봉(세전)"), numSalary, Theme.Text_("만원   월 생활비"), numLiving, Theme.Text_("만원   해마다 1월 인상"), numRaise, Theme.Text_("%   공제대상가족(본인 포함)"), numFamily, Theme.Text_("명 · 그중 8~20세 자녀"), numKids, Theme.Text_("명")),
+            Note("   " + packs["salary"].Desc + " 실수령은 한국 기준이에요: 국민연금·건강·장기요양·고용보험(날짜별 요율) + 근로소득세(국세청 간이세액표, 100%) + 지방소득세 10%, 비과세 식대 월 20만원 포함."),
             Row(chkBankPack, Theme.Text_("   "), cmbItemKind, txtItemName, numItemAmt, lblAmtUnit, Theme.Text_("연"), numItemRate, Theme.Text_("%"), numItemPay, lblPayUnit,
                 numItemMonths, Theme.Text_("개월  "), btnAddItem, btnDelItem),
             Note("   " + packs["bank"].Desc + " 연봉 팩이 켜져 있으면 상환·납입금은 월급에서 나가요."),
@@ -249,6 +261,8 @@ public partial class MainForm
             numSalary.Value = (decimal)Math.Min((double)numSalary.Maximum, st.Salary / 1e4);
             numLiving.Value = (decimal)Math.Min((double)numLiving.Maximum, st.Living / 1e4);
             numRaise.Value = (decimal)Math.Min((double)numRaise.Maximum, st.Raise * 100);
+            numFamily.Value = Math.Clamp(st.Family, 1, 11);
+            numKids.Value = Math.Clamp(st.Kids, 0, (int)numKids.Maximum);
             numGameMonthly.Value = (decimal)Math.Min((double)numGameMonthly.Maximum, st.Monthly / 1e4);
             setupItems.Clear();
             setupItems.AddRange(st.Items.Select(Clone));
@@ -267,7 +281,7 @@ public partial class MainForm
     void ShowGameState()
     {
         bool on = Game.S.Started;
-        if (on) gameStartPanel.Visible = false; else OpenGameSetup();
+        if (on) gameStartPanel.Visible = false; else { OpenGameSetup(); UpdateProfileCard(0, 0); }
         gameMainPanel.Visible = on;
         UpdateGameClock();
         if (on) RefreshGame();
@@ -362,11 +376,17 @@ public partial class MainForm
         else kGameTotal.Set(Krw(value), null, $"시작 {st.StartedAt:yyyy.MM.dd}", "총자산");
         kGameGain.Set((gain >= 0 ? "+" : "") + Krw(gain), gain > 0 ? Theme.Up : gain < 0 ? Theme.Down : null,
             $"{(st.Deposited > 0 ? gain / st.Deposited * 100 : 0):+0.0;-0.0;0.0}% · 넣은 돈 {Krw(st.Deposited)}");
-        kGameCash.Set(Krw(st.Cash), null, st.Pending.Count > 0 ? $"예약 주문 {st.Pending.Count}건" : $"비용 누적 {Krw(st.FeesPaid)}");
+        kGameCash.Set(Krw(st.Cash), null, st.Pending.Count > 0 ? $"예약 주문 {st.Pending.Count}건" : $"수수료 {Krw(st.FeesPaid)} · 세금 {Krw(st.TaxPaid)}");
         kGameDiv.Set(Krw(st.DivReceived), Color.FromArgb(52, 211, 153), "배당락일 기준으로 들어와요");
         double added = st.Deposited - st.SeasonStartDeposited;
         double sret = st.SeasonStartValue > 0 ? (value - added - st.SeasonStartValue) / st.SeasonStartValue * 100 : 0;
         kGameSeason.Set($"{sret:+0.0;-0.0;0.0}%", sret > 0 ? Theme.Up : sret < 0 ? Theme.Down : null, $"{st.Season} · 지금 등급 {Game.Grade(sret)}");
+
+        string PosOf(string code) => rowByCode.TryGetValue(code, out var rr) ? rr.Pos : st.Holdings.FirstOrDefault(h => h.Code == code)?.Etf == true ? "미드필더" : "";
+        int before = st.Missions.Count;
+        GameMissions.Check(st, new GameMissions.Ctx(GamePrice, PosOf, fx, sret));
+        if (st.Missions.Count != before) Game.Save();
+        UpdateProfileCard(value + bank, sret);
 
         var t = new DataTable();
         t.Columns.Add("종목"); t.Columns.Add("코드"); t.Columns.Add("포지션");
@@ -389,6 +409,10 @@ public partial class MainForm
             foreach (var o in st.Pending) sb.AppendLine($"{o.Name} {o.Qty:N0}주 {(o.Buy ? "매수" : "매도")} · {Game.NextOpen(o.Currency, DateTime.Now):M/d HH:mm}");
             sb.AppendLine();
         }
+        sb.AppendLine($"■ 미션 · 레벨 {GameMissions.Level(st)} ({st.Missions.Count}/{GameMissions.All.Length})");
+        foreach (var m in GameMissions.All)
+            sb.AppendLine($"{(st.Missions.Contains(m.Key) ? "✓" : "○")} {m.Title} — {m.Hint}");
+        sb.AppendLine();
         sb.AppendLine("■ 내 정보");
         sb.AppendLine(Game.FinanceLine());
         if (GamePacks.On("bank")) foreach (var i in st.Items) sb.AppendLine("• " + i.Line());
@@ -397,7 +421,7 @@ public partial class MainForm
         foreach (var n in st.News.OrderByDescending(n => n.At).Take(80))
             sb.AppendLine($"{n.At:MM/dd HH:mm}  [{n.Kind}]  {n.Text}");
         sb.AppendLine();
-        sb.AppendLine("국장 가격은 Yahoo 기준 약 20분, 미장은 약 15분 늦어요. 공휴일은 아직 빼지 않아요. 비용은 대략값이에요 (국내 수수료 0.015%, 팔 때 거래세 약 0.2%(ETF 제외), 미국 수수료 0.25% + 환전 0.1%).");
+        sb.AppendLine("국장 가격은 Yahoo 기준 약 20분, 미장은 약 15분 늦어요. 공휴일은 아직 빼지 않아요. 세금은 한국 기준이에요: 배당·이자 15.4%(미국 배당은 현지 15%), 국내 주식 팔 때 증권거래세(ETF 없음), 해외·채권형 국내 ETF 매매차익 15.4%, 미국 주식 양도세는 연 250만원 공제 후 22%를 다음 해 5월에. 수수료(국내 0.015%, 미국 0.25% + 환전 0.1%)는 증권사마다 달라 대략값이에요.");
         txtGameNews.SetText(sb.ToString());
     }
 }

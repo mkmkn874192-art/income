@@ -32,9 +32,8 @@ public record GameNews(DateTime At, string Kind, string Text);
 
 public static class Game
 {
-    // 비용 (대략값 — 증권사·시기마다 다르다)
+    // 증권사 비용 (대략값 — 증권사마다 다르다). 세금은 KrTax에서 한국 기준으로.
     public const double KrFee = 0.00015;     // 국내 매매 수수료 0.015%
-    public const double KrSellTax = 0.0020;  // 국내 주식 팔 때 거래세 약 0.2% (ETF는 없음)
     public const double UsFee = 0.0025;      // 미국 매매 수수료 0.25%
     public const double UsFx = 0.001;        // 환전 비용 0.1% (환율 우대 90% 기준)
 
@@ -57,7 +56,14 @@ public static class Game
         public Dictionary<string, double> LastPrice { get; set; } = new(); // 종목별 지난번 가격 (급등락 소식용)
         public double LastFx { get; set; }
         public double DivReceived { get; set; }   // 받은 배당 합계 (세후, 원)
-        public double FeesPaid { get; set; }      // 수수료·세금·환전 비용 합계
+        public double FeesPaid { get; set; }      // 수수료·환전 비용 합계
+        public double TaxPaid { get; set; }       // 세금 합계 (거래세·ETF 매매차익세·해외주식 양도세)
+        public int Family { get; set; } = 1;      // 공제대상가족 (본인·배우자 포함) — 근로소득세(간이세액표) 계산용
+        public int Kids { get; set; }             // 그중 8세 이상 20세 이하 자녀 (간이세액표 자녀 차감)
+        public Dictionary<int, double> OverseasGain { get; set; } = new(); // 연도별 해외주식 실현 손익 (원)
+        public Dictionary<int, double> FinIncome { get; set; } = new();    // 연도별 금융소득(배당·이자, 세전) — 종합과세 기준 확인용
+        public int OverseasTaxSettled { get; set; }  // 양도세를 낸 마지막 귀속 연도
+        public List<string> Missions { get; set; } = new(); // 달성한 미션 (GameMissions.All의 Key)
         public double Deposited { get; set; }     // 시드 + 받은 월급 합계 (수익률 기준)
         public string Season { get; set; }        // "2026년 4분기"
         public double SeasonStartValue { get; set; }
@@ -117,7 +123,7 @@ public static class Game
 
     // ---------- 계좌 ----------
 
-    public record Finance(double Monthly, List<string> Packs, double Salary, double Living, double Raise, List<FinItem> Items);
+    public record Finance(double Monthly, List<string> Packs, double Salary, double Living, double Raise, List<FinItem> Items, int Family, int Kids);
 
     public static void Start(double seed, Finance f, double fx)
     {
@@ -135,7 +141,7 @@ public static class Game
     // 게임 중에도 재무 설정을 바꿀 수 있다 (다음 달 1일부터 적용)
     public static void SetFinance(Finance f, bool quiet = false)
     {
-        S.Packs = f.Packs.ToList(); S.Salary = f.Salary; S.Living = f.Living; S.Raise = f.Raise; S.Monthly = f.Monthly;
+        S.Packs = f.Packs.ToList(); S.Salary = f.Salary; S.Living = f.Living; S.Raise = f.Raise; S.Monthly = f.Monthly; S.Family = Math.Max(1, f.Family); S.Kids = Math.Clamp(f.Kids, 0, S.Family - 1);
         S.Items = f.Items.ToList();
         if (!quiet) { Add(DateTime.Now, "시스템", "재무 설정 변경 · " + FinanceLine()); Save(); }
     }
@@ -151,24 +157,8 @@ public static class Game
         return string.Join(" · ", parts);
     }
 
-    // 연봉(세전) → 월 실수령 대략값. 4대 보험·소득세를 연봉 구간별 실수령 비율로 근사 (부양가족 1명, 비과세 없음 기준)
-    static readonly (double salary, double ratio)[] NetRatio =
-    {
-        (0, 0.93), (20e6, 0.92), (30e6, 0.90), (40e6, 0.88), (50e6, 0.86), (60e6, 0.84), (80e6, 0.81), (100e6, 0.78), (150e6, 0.735), (200e6, 0.70),
-    };
-    public static double TakeHome(double salary)
-    {
-        if (salary <= 0) return 0;
-        double ratio = NetRatio[^1].ratio;
-        for (int i = 1; i < NetRatio.Length; i++)
-            if (salary <= NetRatio[i].salary)
-            {
-                var (s0, r0) = NetRatio[i - 1]; var (s1, r1) = NetRatio[i];
-                ratio = r0 + (r1 - r0) * (salary - s0) / (s1 - s0);
-                break;
-            }
-        return Math.Round(salary * ratio / 12 / 1000) * 1000;
-    }
+    // 연봉(세전) → 월 실수령: 한국 4대 보험·근로소득세·지방소득세를 KrTax로 계산 (비과세 식대 월 20만원 포함 가정)
+    public static double TakeHome(double salary) => KrTax.Monthly(salary, S.Family, kids: S.Kids).Net;
 
     public static void Add(DateTime at, string kind, string text)
     {
@@ -204,7 +194,8 @@ public static class Game
     static string Execute(GameOrder o, double price, double fx, DateTime at)
     {
         double f = Fx(o.Currency, fx), amount = o.Qty * price * f;
-        double cost = amount * (o.Currency == "USD" ? UsFee + UsFx : KrFee) + (!o.Buy && o.Currency != "USD" && !o.Etf ? amount * KrSellTax : 0);
+        double cost = amount * (o.Currency == "USD" ? UsFee + UsFx : KrFee);
+        double tax = !o.Buy && o.Currency != "USD" ? amount * KrTax.SellTax(o.Market, o.Etf) : 0; // 증권거래세 (팔 때, ETF 없음)
         if (o.Buy)
         {
             if (S.Cash < amount + cost) { Add(at, "실패", $"{o.Name} {o.Qty:N0}주 매수 실패 · 현금이 {Won.Krw(amount + cost - S.Cash)} 모자라요"); return "현금이 모자라요."; }
@@ -218,14 +209,27 @@ public static class Game
         {
             var h = S.Holdings.FirstOrDefault(x => x.Code == o.Code);
             if (h == null || h.Qty < o.Qty) { Add(at, "실패", $"{o.Name} 매도 실패 · 가진 수량이 모자라요"); return "가진 수량이 모자라요."; }
-            double costPart = h.CostKrw * o.Qty / h.Qty, gain = amount - cost - costPart;
-            S.Cash += amount - cost;
+            double costPart = h.CostKrw * o.Qty / h.Qty, gain = amount - cost - tax - costPart;
+            string taxNote = tax > 0 ? $" · 거래세 {Won.Krw(tax)}" : "";
+            // 국내 상장 해외·채권형 등 ETF: 매매차익을 배당소득으로 보고 15.4% 원천징수 (국내 주식형 ETF는 비과세)
+            if (o.Currency != "USD" && o.Etf && gain > 0 && KrTax.EtfGainTaxed(o.Name))
+            {
+                double etfTax = Math.Floor(gain * KrTax.EtfGainTax);
+                tax += etfTax; gain -= etfTax;
+                taxNote += $" · 매매차익 배당소득세 {Won.Krw(etfTax)}";
+                AddFinIncome(at, gain + etfTax);
+            }
+            // 미국 주식: 손익을 연도별로 모아 두었다가 다음 해 5월에 양도소득세(250만원 공제 후 22%)를 낸다
+            if (o.Currency == "USD") S.OverseasGain[at.Year] = S.OverseasGain.GetValueOrDefault(at.Year) + gain;
+            S.Cash += amount - cost - tax;
             h.CostKrw -= costPart;
             h.Qty -= o.Qty;
             if (h.Qty <= 1e-9) S.Holdings.Remove(h);
-            Add(at, "매매", $"{o.Name} {o.Qty:N0}주 매도 · {Won.Price(price, o.Currency)} · 손익 {(gain >= 0 ? "+" : "")}{Won.Krw(gain)}");
+            Add(at, "매매", $"{o.Name} {o.Qty:N0}주 매도 · {Won.Price(price, o.Currency)} · 손익 {(gain >= 0 ? "+" : "")}{Won.Krw(gain)}{taxNote}" +
+                           (o.Currency == "USD" ? " (양도세는 내년 5월 정산)" : ""));
         }
         S.FeesPaid += cost;
+        S.TaxPaid += tax;
         S.LastPrice[o.Code] = price;
         if (o.Buy) Add(at, "매매", $"{o.Name} {o.Qty:N0}주 매수 · {Won.Price(price, o.Currency)} · {Won.Krw(amount + cost)} (비용 {Won.Krw(cost)})");
         return $"{o.Name} {o.Qty:N0}주 {(o.Buy ? "매수" : "매도")} 체결 · {Won.Price(price, o.Currency)}";
@@ -244,16 +248,21 @@ public static class Game
 
         // 1) 매달 1일: 켜진 확장팩(연봉·생활비, 대출·적금·예금)과 매달 투자금
         for (var m = new DateTime(from.Year, from.Month, 1).AddMonths(1); m <= now; m = m.AddMonths(1))
+        {
             GamePacks.RunMonth(m);
+            if (m.Month == 5) SettleOverseasTax(m);
+        }
 
         // 2) 배당: 배당락일이 지난번~지금 사이이고, 그 전에 산 종목만 (세후)
         foreach (var h in S.Holdings)
             if (divs.TryGetValue(h.Code, out var pays))
                 foreach (var p in pays.Where(p => p.Date > from.Date && p.Date <= now && p.Date > h.Since.Date))
                 {
-                    double got = h.Qty * p.Close * Fx(h.Currency, fx) * (1 - Income.Tax(h.Currency));
+                    double pre = h.Qty * p.Close * Fx(h.Currency, fx), got = pre * (1 - Income.Tax(h.Currency));
                     S.Cash += got;
                     S.DivReceived += got;
+                    S.TaxPaid += pre - got;
+                    AddFinIncome(p.Date, pre);
                     Add(p.Date, "배당", $"{h.Name} 배당 {Won.Krw(got)} (주당 {Won.Price(p.Close, h.Currency)} × {h.Qty:N0}주, 세후)");
                 }
 
@@ -295,6 +304,29 @@ public static class Game
         S.LastTick = now;
         Save();
         return S.News.Skip(before).OrderBy(n => n.At).ToList();
+    }
+
+    // 해외주식 양도소득세: 지난해 실현 손익(손실과 합산)에서 250만원을 빼고 22% (매년 5월 신고·납부)
+    static void SettleOverseasTax(DateTime may)
+    {
+        int year = may.Year - 1;
+        if (S.OverseasTaxSettled >= year) return;
+        S.OverseasTaxSettled = year;
+        double gain = S.OverseasGain.GetValueOrDefault(year);
+        if (gain == 0) return;
+        double taxBase = Math.Max(0, gain - KrTax.OverseasGainDeduction), tax = Math.Floor(taxBase * KrTax.OverseasGainRate);
+        if (tax > 0) { S.Cash -= tax; S.TaxPaid += tax; }
+        Add(may, "세금", $"{year}년 해외주식 양도소득세 신고 · 손익 {(gain >= 0 ? "+" : "")}{Won.Krw(gain)} − 기본공제 {Won.Krw(KrTax.OverseasGainDeduction)} → " +
+                         (tax > 0 ? $"세금 {Won.Krw(tax)} (22%) 납부" : "낼 세금 없음"));
+    }
+
+    // 금융소득(배당·이자, 세전)이 한 해 2천만원을 넘으면 종합과세 대상이라고 알려 준다
+    public static void AddFinIncome(DateTime at, double preTax)
+    {
+        double before = S.FinIncome.GetValueOrDefault(at.Year), after = before + preTax;
+        S.FinIncome[at.Year] = after;
+        if (before <= KrTax.FinancialIncomeThreshold && after > KrTax.FinancialIncomeThreshold)
+            Add(at, "세금", $"{at.Year}년 금융소득(배당·이자)이 {Won.Krw(KrTax.FinancialIncomeThreshold)}을 넘었어요 · 넘는 부분은 다음 해 5월 종합소득세로 다른 소득과 합쳐 계산돼요 (게임에서는 알림만)");
     }
 
     public static string Grade(double seasonReturn) => seasonReturn switch

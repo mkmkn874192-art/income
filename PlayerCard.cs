@@ -210,6 +210,7 @@ class PlayerCard : Form
         KeyPreview = true;
         KeyDown += (_, e) => { if (e.KeyCode == Keys.Escape) Close(); };
         Theme.DarkTitleBar(this);
+        if (Theme.AppIcon != null) Icon = Theme.AppIcon;
 
         var right = new Panel { Dock = DockStyle.Right, Width = 220 };
         var posRow = new Panel { Dock = DockStyle.Top, Height = 34 };

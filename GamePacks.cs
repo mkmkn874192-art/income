@@ -85,9 +85,18 @@ public class SalaryPack : IGamePack
             s.Salary = Math.Round(s.Salary * (1 + s.Raise) / 1e4) * 1e4;
             raise = $"연봉 인상 {s.Raise * 100:0.#}% ({Won.Krw(old)} → {Won.Krw(s.Salary)}) · ";
         }
-        double net = Game.TakeHome(s.Salary);
-        flow += net - s.Living;
-        return raise + $"월급 실수령 {Won.Krw(net)} − 생활비 {Won.Krw(s.Living)}";
+        var pay = KrTax.Monthly(s.Salary, s.Family, m, kids: s.Kids);
+        flow += pay.Net - s.Living;
+        // 이자·배당이 많으면 건강보험료를 더 낸다 (소득월액보험료)
+        int y = KrTax.ExtraHealthIncomeYear(m);
+        double extra = KrTax.ExtraHealthPremium(s.FinIncome.GetValueOrDefault(y), m);
+        if (extra > 0)
+        {
+            flow -= extra;
+            s.TaxPaid += extra;
+            raise += $"건강보험 추가(소득월액, {y}년 이자·배당 기준) {Won.Krw(extra)} · ";
+        }
+        return raise + $"월급 {Won.Krw(pay.Gross)} − 4대 보험 {Won.Krw(pay.Pension + pay.Health + pay.Ltc + pay.Employment)} − 소득세 {Won.Krw(pay.IncomeTax + pay.LocalTax)} = 실수령 {Won.Krw(pay.Net)} − 생활비 {Won.Krw(s.Living)}";
     }
 }
 
@@ -98,7 +107,7 @@ public class BankPack : IGamePack
     public string Key => "bank";
     public string Name => "대출·적금·예금";
     public string Desc => "대출은 매달 이자와 원금을 갚고, 적금은 매달 넣고, 예금은 만기에 이자를 받아요. 만기 금액은 투자 계좌로 들어와요.";
-    const double InterestTax = 0.154; // 예적금 이자소득세
+    static double InterestTax => KrTax.InterestTax; // 예적금 이자소득세 15.4%
 
     public string OnMonth(Game.State s, DateTime m, ref double flow)
     {
@@ -152,6 +161,8 @@ public class BankPack : IGamePack
     {
         i.Done = true;
         flow += total;
-        Game.Add(m, "만기", $"{i.Kind} '{i.Name}' 만기 · {Won.Krw(total)} 투자 계좌로 (세후 이자 {Won.Krw(interest)})");
+        Game.AddFinIncome(m, interest / (1 - InterestTax));
+        s.TaxPaid += interest / (1 - InterestTax) - interest;
+        Game.Add(m, "만기", $"{i.Kind} '{i.Name}' 만기 · {Won.Krw(total)} 투자 계좌로 (세후 이자 {Won.Krw(interest)}, 이자소득세 15.4%)");
     }
 }

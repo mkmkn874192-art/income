@@ -19,8 +19,8 @@ public class IncomeItem
 
 public static class Income
 {
-    public const double TaxRate = 0.154;   // 국내 배당소득세 14% + 지방소득세 1.4%
-    public const double UsTaxRate = 0.15;  // 미국 배당 원천징수 (한·미 조세조약)
+    public const double TaxRate = KrTax.DividendTax;             // 국내 배당소득세 14% + 지방소득세 1.4%
+    public const double UsTaxRate = KrTax.UsDividendWithholding; // 미국 배당 원천징수 15% (한·미 조세조약)
 
     public static double Tax(string currency) => currency == "USD" ? UsTaxRate : TaxRate;
 

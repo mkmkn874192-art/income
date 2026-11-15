@@ -25,6 +25,16 @@ static class Theme
     public static readonly Color Disabled = Color.FromArgb(52, 52, 58);
     public static readonly Color HeaderBg = Color.FromArgb(24, 24, 27);
     public static readonly Color AltRow = Color.FromArgb(23, 23, 26);
+    public static readonly Color SidebarSection = Color.FromArgb(113, 113, 122); // 사이드바 묶음 제목
+    public static readonly Color SidebarCard = Color.FromArgb(18, 18, 21);       // 사이드바 '내 정보' 카드
+    public static readonly Color Gold = Color.FromArgb(250, 204, 21);            // 돈·업적·별점 강조
+
+    // 시즌 등급 색 (S 금, A 초록, B 하늘, C 회색, D 주황, F 빨강)
+    public static Color GradeColor(string g) => g switch
+    {
+        "S" => Gold, "A" => Color.FromArgb(52, 211, 153), "B" => Color.FromArgb(96, 165, 250),
+        "C" => Color.FromArgb(161, 161, 170), "D" => Color.FromArgb(251, 146, 60), _ => Color.FromArgb(248, 113, 113),
+    };
     // 채권 / 지수 / 배당 / 개별주
     public static readonly Color[] CatColors =
     {
@@ -136,6 +146,23 @@ static class Theme
         };
     }
 
+    // 앱 아이콘 (Assets/app.ico를 리소스로 넣어 둠). 여러 크기가 들어 있어 작업표시줄·제목 표시줄이 배율에 맞는 크기를 고른다.
+    static Icon appIcon;
+    public static Icon AppIcon
+    {
+        get
+        {
+            if (appIcon != null) return appIcon;
+            try
+            {
+                using var st = typeof(Theme).Assembly.GetManifestResourceStream("app.ico");
+                if (st != null) appIcon = new Icon(st);
+            }
+            catch { } // 아이콘이 없어도 앱은 뜬다
+            return appIcon;
+        }
+    }
+
     public static Panel Spacer(int h) => new() { Dock = DockStyle.Top, Height = h, BackColor = Color.Transparent };
 
     public static GraphicsPath Round(RectangleF r, float radius)
@@ -239,12 +266,27 @@ class KpiTile : Card
         Controls.Add(this.caption = new Label { Text = caption, Dock = DockStyle.Top, Height = 22, Font = Theme.Small, ForeColor = Theme.Muted });
     }
 
+    public Color Bar = Theme.Accent; // 왼쪽 강조 막대 색 (값 색이 있으면 그 색)
+
     public void Set(string text, Color? color = null, string note = null, string caption = null)
     {
         value.Text = text;
         value.ForeColor = color ?? Theme.Text;
+        Bar = color ?? Theme.Accent;
         if (note != null) this.note.Text = note;
         if (caption != null) this.caption.Text = caption;
+        Invalidate();
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        float s = DeviceDpi / 96f;
+        if (Height < 30 * s) return;
+        e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        using var p = Theme.Round(new RectangleF(1.5f * s, 16 * s, 3 * s, Height - 32 * s), 1.5f * s);
+        using var b = new SolidBrush(Color.FromArgb(200, Bar));
+        e.Graphics.FillPath(b, p);
     }
 }
 

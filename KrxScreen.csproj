@@ -8,6 +8,15 @@
     <Nullable>disable</Nullable>
     <AssemblyName>KrxScreen</AssemblyName>
     <RootNamespace>KrxScreen</RootNamespace>
+    <!-- 실행 파일 아이콘 (탐색기·바탕화면) -->
+    <ApplicationIcon>Assets/app.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 창·작업표시줄 아이콘: 여러 크기를 그대로 쓰려고 리소스로도 넣는다 -->
+    <EmbeddedResource Include="Assets/app.ico" LogicalName="app.ico" />
+    <!-- 근로소득 간이세액표 (월 원천징수 소득세) -->
+    <EmbeddedResource Include="Assets/ganise.csv" LogicalName="ganise.csv" />
+  </ItemGroup>
 
 </Project>
