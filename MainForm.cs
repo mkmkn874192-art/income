@@ -741,9 +741,23 @@ public class MainForm : Form
         return page;
     }
 
-    static string Krw(double v) =>
-        v >= 1e8 ? $"{Math.Floor(v / 1e8):N0}억 {Math.Floor(v % 1e8 / 1e4):N0}만원"
-        : v >= 1e4 ? $"{Math.Floor(v / 1e4):N0}만 {v % 1e4:N0}원" : $"{v:N0}원";
+    // 1,234,567,890 → "12억 3,456만원", 10,000,000 → "1,000만원" (0인 단위는 생략)
+    static string Krw(double v)
+    {
+        if (v < 0) return "-" + Krw(-v);
+        v = Math.Round(v);
+        if (v >= 1e8)
+        {
+            double man = Math.Floor(v % 1e8 / 1e4);
+            return $"{Math.Floor(v / 1e8):N0}억" + (man > 0 ? $" {man:N0}만" : "") + "원";
+        }
+        if (v >= 1e4)
+        {
+            double rest = v % 1e4;
+            return $"{Math.Floor(v / 1e4):N0}만" + (rest > 0 ? $" {rest:N0}" : "") + "원";
+        }
+        return $"{v:N0}원";
+    }
 
     void RefreshIncome()
     {
