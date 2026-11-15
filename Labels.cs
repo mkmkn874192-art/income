@@ -93,6 +93,15 @@ public static class Labels
         var rows = quotes.Select(q => new StockRow { Q = q }).ToList();
         var byCode = rows.ToDictionary(r => r.Q.Code);
 
+        // 미국 종목: Yahoo의 PER·PBR로 '가격 매력'과 '돈 버는 힘'(ROE = PBR ÷ PER)을 채운다 (국내는 가치 분석 결과로)
+        foreach (var r in rows.Where(r => r.Q.IsUs))
+        {
+            r.Per = r.Q.Per; r.Pbr = r.Q.Pbr;
+            if (r.Q.Per > 0 && r.Q.Pbr > 0) r.Roe = r.Q.Pbr / r.Q.Per * 100;
+            if (r.Roe >= 15) r.Labels.Add("고ROE");
+            if (r.Pbr is > 0 and < 1) r.Labels.Add("저PBR");
+        }
+
         if (screen != null)
             foreach (DataRow s in screen.Rows)
             {

@@ -60,7 +60,7 @@ class TermText : RichTextBox
                 for (int k = i; k < i + word.Length; k++) taken[k] = true;
                 links.Add((i, word.Length, e));
                 Select(i, word.Length);
-                SelectionColor = Color.FromArgb(96, 165, 250);
+                SelectionColor = Theme.AccentText;
                 SelectionFont = link;
             }
         }
@@ -74,7 +74,7 @@ class TermPopup : Form
     static TermPopup current;
     readonly Label title = new() { Dock = DockStyle.Top, Height = 34, Font = Theme.H2, ForeColor = Theme.Text, AutoEllipsis = true };
     readonly Label term = new() { Dock = DockStyle.Top, Height = 22, Font = Theme.Small, ForeColor = Theme.Muted, AutoEllipsis = true };
-    readonly Label summary = new() { Dock = DockStyle.Top, Height = 52, Font = Theme.Bold, ForeColor = Color.FromArgb(96, 165, 250) };
+    readonly Label summary = new() { Dock = DockStyle.Top, Height = 52, Font = Theme.Bold, ForeColor = Theme.AccentText };
     readonly TermText body = new() { Dock = DockStyle.Fill };
     readonly Button full = Theme.Secondary("용어사전에서 전체 보기");
     Glossary.Entry entry;

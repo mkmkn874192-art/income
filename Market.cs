@@ -12,6 +12,8 @@ public record Quote(string Code, string Name, string Market, double Price, doubl
     public double? Dps { get; init; }      // 연간 주당배당금, 그 나라 통화
     public bool IsUs => Currency == "USD";
     public string NameEn { get; init; } // 미국 종목의 원래 영어 이름 (Name은 한글 별명)
+    public double? Per { get; init; }   // 미국만: 최근 12개월 PER (Yahoo trailingPE)
+    public double? Pbr { get; init; }   // 미국만: PBR (Yahoo priceToBook)
 
     // Yahoo에서 덧붙이는 업종·추세 (모두 %). 국장은 KrTrends로 채운다.
     public string Sector { get; init; }

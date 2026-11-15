@@ -52,11 +52,11 @@ public static class Scout
         string n = r.Q.Name;
         int V(string name) => a.FirstOrDefault(x => x.Name == name)?.Value ?? 0;
         if (new[] { "국채", "국고채", "채권", "단기", "금리", "통안" }.Any(n.Contains)) return ("수비수", "채권 · 지키는 돈", Theme.CatColors[0]);
-        if (n.Contains("금현물") || n.Contains("골드")) return ("수비수", "금 · 물가 대비", Color.FromArgb(234, 179, 8));
+        if (n.Contains("금현물") || n.Contains("골드")) return ("수비수", "금 · 물가 대비", Theme.Gold);
         if (V("배당력") >= 12) return ("미드필더", "배당 · 매달 굴리는 돈", Theme.CatColors[2]);
         if (n.Contains("200") || n.Contains("S&P") || n.Contains("나스닥") || r.Q.Market == "US ETF") return ("미드필더", "지수 · 시장 전체", Theme.CatColors[1]);
-        if (V("성장") >= 12 || V("요즘 폼") >= 14) return ("공격수", "성장 · 키우는 돈", Theme.Up);
-        return ("공격수", "개별주", Theme.CatColors[3]);
+        if (V("성장") >= 12 || V("요즘 폼") >= 14) return ("공격수", "성장 · 키우는 돈", Theme.CatColors[3]);
+        return ("공격수", "개별주", Theme.Teal);
     }
 
     // 능력치 묶음 (보여 주는 순서)
@@ -98,9 +98,8 @@ public static class Scout
         return string.Join("\n", lines);
     }
 
-    // 축구 게임처럼 숫자 구간별 색: 1~5 빨강, 6~10 주황, 11~15 연두, 16~20 초록
-    public static Color AttrColor(int v) => v <= 5 ? Color.FromArgb(239, 68, 68) : v <= 10 ? Color.FromArgb(251, 146, 60)
-                                         : v <= 15 ? Color.FromArgb(163, 230, 53) : Color.FromArgb(34, 197, 94);
+    // 숫자 구간별 색: 1~5 주황(낮음), 6~10 회색(보통), 11~15 연두, 16~20 초록. 빨강은 '가격 오름'이라 쓰지 않는다.
+    public static Color AttrColor(int v) => Theme.Attr[v <= 5 ? 0 : v <= 10 ? 1 : v <= 15 ? 2 : 3];
 }
 
 // 능력치 목록: 이름 · 색 막대 · 숫자 상자
@@ -162,8 +161,10 @@ class AttrList : Control
             // 숫자 상자
             var rb = new RectangleF(Width - box - 2, y + (rowH - box) / 2f, box, box);
             var c = a.Value is int v2 ? Scout.AttrColor(v2) : Theme.Disabled;
-            using (var bp = Theme.Round(rb, 8 * s)) using (var bb = new SolidBrush(c)) g.FillPath(bb, bp);
-            TextRenderer.DrawText(g, a.Value?.ToString() ?? "–", Theme.Bold, Rectangle.Round(rb), a.Value == null ? Theme.Muted : Color.FromArgb(20, 20, 20),
+            using (var bp = Theme.Round(rb, 7 * s)) using (var bb = new SolidBrush(c)) g.FillPath(bb, bp);
+            if (a.Value >= 18)
+                using (var gp = Theme.Round(RectangleF.Inflate(rb, 2 * s, 2 * s), 9 * s)) using (var ring = new Pen(Theme.Gold, 1.5f * s)) g.DrawPath(ring, gp); // 최고 수준
+            TextRenderer.DrawText(g, a.Value?.ToString() ?? "–", Theme.Bold, Rectangle.Round(rb), a.Value == null ? Theme.Muted : Theme.Ink,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             y += rowH;
         }
@@ -184,7 +185,7 @@ class PlayerCard : Form
     readonly Label name = new() { Dock = DockStyle.Top, Height = 38, Font = Theme.H1, ForeColor = Theme.Text, AutoEllipsis = true };
     readonly Label sub = new() { Dock = DockStyle.Top, Height = 22, Font = Theme.Small, ForeColor = Theme.Muted };
     readonly Label price = new() { Dock = DockStyle.Top, Height = 30, Font = Theme.H2, ForeColor = Theme.Text };
-    readonly Label stars = new() { Dock = DockStyle.Top, Height = 40, Font = new Font(Theme.H1.FontFamily, 18F), ForeColor = Color.FromArgb(250, 204, 21), TextAlign = ContentAlignment.MiddleRight };
+    readonly Label stars = new() { Dock = DockStyle.Top, Height = 40, Font = new Font(Theme.H1.FontFamily, 18F), ForeColor = Theme.Gold, TextAlign = ContentAlignment.MiddleRight };
     readonly Label overall = new() { Dock = DockStyle.Top, Height = 22, Font = Theme.Small, ForeColor = Theme.Muted, TextAlign = ContentAlignment.MiddleRight };
     readonly Pill pos = new("", Theme.Accent) { Anchor = AnchorStyles.Top | AnchorStyles.Right };
     readonly AttrList attrs = new() { Dock = DockStyle.Fill };
@@ -327,12 +328,12 @@ class Formation : Control
         var pitch = new RectangleF(2, 22 * s, Width - 4, Height - 24 * s);
         if (pitch.Width < 40 * s || pitch.Height < 60 * s) return; // 크기가 0이면 그라데이션 붓에서 오류가 난다
         using (var path = Theme.Round(pitch, 12 * s))
-        using (var grass = new LinearGradientBrush(pitch, Color.FromArgb(22, 78, 50), Color.FromArgb(14, 52, 34), 90f))
+        using (var grass = new LinearGradientBrush(pitch, Theme.PitchTop, Theme.PitchBottom, 90f))
             g.FillPath(grass, path);
         // 잔디 줄무늬와 라인
-        using (var stripe = new SolidBrush(Color.FromArgb(14, 255, 255, 255)))
+        using (var stripe = new SolidBrush(Color.FromArgb(10, 255, 255, 255)))
             for (int i = 0; i < 8; i += 2) g.FillRectangle(stripe, pitch.X + 6 * s, pitch.Y + pitch.Height * i / 8, pitch.Width - 12 * s, pitch.Height / 8);
-        using var line = new Pen(Color.FromArgb(70, 255, 255, 255), 1.2f * s);
+        using var line = new Pen(Color.FromArgb(60, 255, 255, 255), 1.2f * s);
         var inner = RectangleF.Inflate(pitch, -8 * s, -8 * s);
         g.DrawRectangle(line, inner.X, inner.Y, inner.Width, inner.Height);
         float midY = inner.Y + inner.Height / 2, cr = Math.Min(inner.Width, inner.Height) * 0.12f;
@@ -345,7 +346,7 @@ class Formation : Control
         TextRenderer.DrawText(g, staff, Theme.Small, new Rectangle(0, 0, Width, (int)(20 * s)), Theme.Muted, TextFormatFlags.EndEllipsis);
         if (players.Count == 0)
         {
-            TextRenderer.DrawText(g, "수석코치를 고르면 선수들이 들어와요", Theme.Small, Rectangle.Round(pitch), Color.FromArgb(200, 255, 255, 255),
+            TextRenderer.DrawText(g, "수석코치를 고르면 선수들이 들어와요", Theme.Small, Rectangle.Round(pitch), Theme.PitchText,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             return;
         }
@@ -366,10 +367,10 @@ class Formation : Control
         float gy = inner.Y + inner.Height * 0.88f, gr = 16 * s;
         using (var dash = new Pen(Color.FromArgb(160, 255, 255, 255), 1.4f * s) { DashStyle = DashStyle.Dash })
             g.DrawEllipse(dash, inner.X + inner.Width / 2 - gr, gy - gr, gr * 2, gr * 2);
-        TextRenderer.DrawText(g, "GK", Theme.Small, Rectangle.Round(new RectangleF(inner.X + inner.Width / 2 - gr, gy - gr, gr * 2, gr * 2)), Color.White,
+        TextRenderer.DrawText(g, "GK", Theme.Small, Rectangle.Round(new RectangleF(inner.X + inner.Width / 2 - gr, gy - gr, gr * 2, gr * 2)), Theme.PitchText,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         TextRenderer.DrawText(g, "비상금 (생활비 3~6개월, 투자 밖)", Theme.Small, new Rectangle((int)inner.X, (int)(gy + gr), (int)inner.Width, (int)(18 * s)),
-            Color.FromArgb(200, 255, 255, 255), TextFormatFlags.HorizontalCenter);
+            Theme.PitchText, TextFormatFlags.HorizontalCenter);
     }
 
     static void DrawPlayer(Graphics g, Player p, float cx, float cy, float r, float s)
@@ -377,12 +378,12 @@ class Formation : Control
         using (var shadow = new SolidBrush(Color.FromArgb(80, 0, 0, 0))) g.FillEllipse(shadow, cx - r + 2, cy - r + 3, r * 2, r * 2);
         using (var fill = new SolidBrush(p.Color)) g.FillEllipse(fill, cx - r, cy - r, r * 2, r * 2);
         using (var ring = new Pen(Color.FromArgb(220, 255, 255, 255), 1.5f * s)) g.DrawEllipse(ring, cx - r, cy - r, r * 2, r * 2);
-        TextRenderer.DrawText(g, $"{p.Weight * 100:0}", Theme.Bold, Rectangle.Round(new RectangleF(cx - r, cy - r, r * 2, r * 2)), Color.FromArgb(15, 15, 15),
+        TextRenderer.DrawText(g, $"{p.Weight * 100:0}", Theme.Bold, Rectangle.Round(new RectangleF(cx - r, cy - r, r * 2, r * 2)), Theme.Ink,
             TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         string name = Names.Short(p.Name);
         var nameRect = new Rectangle((int)(cx - 60 * s), (int)(cy + r + 1), (int)(120 * s), (int)(17 * s));
-        TextRenderer.DrawText(g, name, Theme.Small, nameRect, Color.White, TextFormatFlags.HorizontalCenter | TextFormatFlags.EndEllipsis);
+        TextRenderer.DrawText(g, name, Theme.Small, nameRect, Theme.PitchText, TextFormatFlags.HorizontalCenter | TextFormatFlags.EndEllipsis);
         string stars = new string('★', (int)Math.Round(p.Stars));
-        TextRenderer.DrawText(g, stars, Theme.Small, nameRect with { Y = nameRect.Bottom - (int)(2 * s) }, Color.FromArgb(250, 204, 21), TextFormatFlags.HorizontalCenter);
+        TextRenderer.DrawText(g, stars, Theme.Small, nameRect with { Y = nameRect.Bottom - (int)(2 * s) }, Theme.Gold, TextFormatFlags.HorizontalCenter);
     }
 }

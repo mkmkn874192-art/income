@@ -17,7 +17,7 @@ class NavSection : Control
     {
         float s = DeviceDpi / 96f;
         e.Graphics.Clear(Theme.Sidebar);
-        TextRenderer.DrawText(e.Graphics, Text, Theme.Small, new Rectangle((int)(26 * s), (int)(8 * s), Width, Height - (int)(8 * s)), Theme.SidebarSection,
+        TextRenderer.DrawText(e.Graphics, Text, Theme.SmallBold, new Rectangle((int)(26 * s), (int)(8 * s), Width, Height - (int)(8 * s)), Theme.SidebarSection,
             TextFormatFlags.Left | TextFormatFlags.VerticalCenter);
     }
 }
@@ -48,6 +48,12 @@ class TabItem : Control
         return new Size(t.Width + (int)(28 * s), t.Height + (int)(18 * s));
     }
 
+    protected override void ScaleControl(SizeF factor, BoundsSpecified specified)
+    {
+        base.ScaleControl(factor, specified);
+        Size = GetPreferredSize(Size.Empty); // 배율이 두 번 들어가지 않게
+    }
+
     protected override AccessibleObject CreateAccessibilityInstance() => new TabAccessible(this);
 
     class TabAccessible : ControlAccessibleObject
@@ -69,11 +75,11 @@ class TabItem : Control
         if (hover && !selected)
             using (var p = Theme.Round(new RectangleF(2 * s, 2 * s, Width - 4 * s, Height - 8 * s), 8 * s))
             using (var b = new SolidBrush(Theme.SidebarHover)) g.FillPath(b, p);
-        var fg = selected ? Theme.Text : hover ? Theme.Text : Theme.Muted;
+        var fg = selected || hover ? Theme.Text : Theme.TextSoft;
         TextRenderer.DrawText(g, Text, Font, new Rectangle(0, 0, Width, Height - (int)(4 * s)), fg, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         if (selected)
             using (var p = Theme.Round(new RectangleF(10 * s, Height - 4 * s, Width - 20 * s, 3 * s), 1.5f * s))
-            using (var b = new SolidBrush(Theme.Accent)) g.FillPath(b, p);
+            using (var b = new SolidBrush(Theme.AccentText)) g.FillPath(b, p);
     }
 }
 
@@ -122,8 +128,8 @@ class ProfileCard : Control
         }
         // 동그라미 아바타
         float d = 34 * s, ax = box.X + 10 * s, ay = box.Y + (box.Height - d) / 2;
-        using (var lg = new LinearGradientBrush(new RectangleF(ax, ay, d, d), Theme.Accent, Theme.Gold, 45f)) g.FillEllipse(lg, ax, ay, d, d);
-        TextRenderer.DrawText(g, "나", Theme.Bold, Rectangle.Round(new RectangleF(ax, ay, d, d)), Color.White, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+        using (var lg = new LinearGradientBrush(new RectangleF(ax, ay, d, d), Theme.GoldLight, Theme.GoldDeep, 90f)) g.FillEllipse(lg, ax, ay, d, d);
+        TextRenderer.DrawText(g, "나", Theme.Bold, Rectangle.Round(new RectangleF(ax, ay, d, d)), Theme.Ink, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         float tx = ax + d + 10 * s, tw = box.Right - tx - (grade != "" ? 34 * s : 8 * s);
         TextRenderer.DrawText(g, "내 정보", Theme.Bold, new Rectangle((int)tx, (int)(box.Y + 7 * s), (int)tw, (int)(20 * s)), Theme.Text, TextFormatFlags.EndEllipsis);
         TextRenderer.DrawText(g, line1, Theme.Small, new Rectangle((int)tx, (int)(box.Y + 27 * s), (int)tw, (int)(17 * s)), Theme.Text, TextFormatFlags.EndEllipsis);
@@ -132,7 +138,7 @@ class ProfileCard : Control
         {
             var gb = new RectangleF(box.Right - 30 * s, box.Y + (box.Height - 22 * s) / 2, 22 * s, 22 * s);
             using (var p = Theme.Round(gb, 6 * s)) using (var b = new SolidBrush(Theme.GradeColor(grade))) g.FillPath(b, p);
-            TextRenderer.DrawText(g, grade, Theme.Bold, Rectangle.Round(gb), Color.FromArgb(15, 15, 20), TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            TextRenderer.DrawText(g, grade, Theme.Bold, Rectangle.Round(gb), Theme.Ink, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         }
     }
 }

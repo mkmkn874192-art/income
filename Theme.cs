@@ -4,52 +4,95 @@ using System.Runtime.InteropServices;
 
 namespace KrxScreen;
 
-// 색·글꼴·공통 컨트롤 스타일 (블랙 테마)
+// 색·글꼴·공통 컨트롤 스타일 — "미드나잇 레저": 남색 바탕, 누를 수 있는 곳은 남보라, 돈·보상은 금색.
+// 가격 방향(상승 빨강·하락 하늘)과 좋고 나쁨(초록·주황)은 서로 다른 색이라 헷갈리지 않는다.
+// 글자 대비는 모두 WCAG AA 이상 (본문 4.5:1). TextRenderer는 투명도를 무시하므로 글자 색은 불투명 색만 쓴다.
 static class Theme
 {
-    public static readonly Color Sidebar = Color.FromArgb(0, 0, 0);
-    public static readonly Color SidebarHover = Color.FromArgb(24, 24, 27);
-    public static readonly Color SidebarText = Color.FromArgb(161, 161, 170);
-    public static readonly Color Bg = Color.FromArgb(9, 9, 11);
-    public static readonly Color CardBg = Color.FromArgb(19, 19, 22);
-    public static readonly Color InputBg = Color.FromArgb(28, 28, 32);
-    public static readonly Color Border = Color.FromArgb(39, 39, 42);
-    public static readonly Color Text = Color.FromArgb(244, 244, 245);
-    public static readonly Color Muted = Color.FromArgb(140, 140, 150);
-    public static readonly Color Accent = Color.FromArgb(59, 130, 246);
-    public static readonly Color AccentSoft = Color.FromArgb(30, 41, 70);
-    public static readonly Color Good = Color.FromArgb(34, 197, 94);
-    public static readonly Color Bad = Color.FromArgb(239, 68, 68);
-    public static readonly Color Up = Color.FromArgb(248, 81, 73);    // 국내 관례: 상승 빨강
-    public static readonly Color Down = Color.FromArgb(77, 141, 255); // 하락 파랑
-    public static readonly Color Disabled = Color.FromArgb(52, 52, 58);
-    public static readonly Color HeaderBg = Color.FromArgb(24, 24, 27);
-    public static readonly Color AltRow = Color.FromArgb(23, 23, 26);
-    public static readonly Color SidebarSection = Color.FromArgb(113, 113, 122); // 사이드바 묶음 제목
-    public static readonly Color SidebarCard = Color.FromArgb(18, 18, 21);       // 사이드바 '내 정보' 카드
-    public static readonly Color Gold = Color.FromArgb(250, 204, 21);            // 돈·업적·별점 강조
+    static Color H(int rgb) => Color.FromArgb((rgb >> 16) & 255, (rgb >> 8) & 255, rgb & 255);
 
-    // 시즌 등급 색 (S 금, A 초록, B 하늘, C 회색, D 주황, F 빨강)
+    // ---- 바탕 (어두운 순) ----
+    public static readonly Color Sidebar = H(0x090E1A);      // 사이드바 (가장 어두움)
+    public static readonly Color SidebarHover = H(0x141C2E);
+    public static readonly Color SidebarText = H(0xA3AEC4);  // 8.6:1
+    public static readonly Color SidebarSection = H(0x7C89A3); // 사이드바 묶음 제목 5.5:1
+    public static readonly Color SidebarCard = H(0x111829);  // 사이드바 '내 정보' 카드
+    public static readonly Color Bg = H(0x0C1220);           // 페이지
+    public static readonly Color CardBg = H(0x131A2B);       // 카드·표·그래프 (자식이 같은 색으로 지우므로 단색)
+    public static readonly Color CardTop = H(0x172035);      // 요약 숫자 칸 위쪽 그라데이션
+    public static readonly Color InputBg = H(0x1B2439);      // 입력칸·보조 버튼·막대 바탕·말풍선
+    public static readonly Color HeaderBg = H(0x182136);     // 표 머리글
+    public static readonly Color AltRow = H(0x161D30);       // 표 줄무늬
+    public static readonly Color Border = H(0x253049);       // 카드 테두리 (장식용)
+    public static readonly Color BorderHi = H(0x36435F);     // 마우스 올림 테두리, 허용 범위 띠
+    public static readonly Color GridLine = H(0x1E273D);     // 표 줄, 그래프 눈금, 구분선
+    public static readonly Color InputBorder = H(0x5B6885);  // 입력칸 경계 (3:1)
+
+    // ---- 글자 ----
+    public static readonly Color Text = H(0xE8ECF4);         // 14.7:1 (카드 위)
+    public static readonly Color TextSoft = H(0xBDC6D7);     // 보조 본문, 선택 안 된 탭 10:1
+    public static readonly Color Muted = H(0x8E9BB4);        // 설명·머리글 6.2:1
+    public static readonly Color DisabledText = H(0x6B7790);
+    public static readonly Color Ink = H(0x0C1220);          // 밝은 바탕 위 어두운 글자 (능력치 숫자, 선수 원)
+
+    // ---- 행동 (남보라) ----
+    public static readonly Color Accent = H(0x4F5BE6);       // 주 버튼 (흰 글자 5.3:1)
+    public static readonly Color AccentHover = H(0x5A66EE);
+    public static readonly Color AccentPressed = H(0x4651D6);
+    public static readonly Color AccentSoft = H(0x1F2752);   // 선택된 메뉴·줄
+    public static readonly Color AccentText = H(0xA7AFFF);   // 글자·선으로 쓰는 강조 (링크, 탭 밑줄, 포커스)
+
+    // ---- 의미 ----
+    public static readonly Color Good = H(0x3FCB99);         // 좋음·배당·수입
+    public static readonly Color GoodSoft = H(0x11302A);
+    public static readonly Color Bad = H(0xFF8F45);          // 오류·손실·경고 — 일부러 빨강이 아님 (빨강은 상승)
+    public static readonly Color BadSoft = H(0x38231A);
+    public static readonly Color Up = H(0xFF6068);           // 국내 관례: 상승 빨강
+    public static readonly Color UpSoft = H(0x3A1B24);
+    public static readonly Color Down = H(0x47A6FF);         // 하락 하늘
+    public static readonly Color DownSoft = H(0x132A4A);
+    public static readonly Color Disabled = H(0x232C42);
+    public static readonly Color Teal = H(0x5CC3D6);
+
+    // ---- 돈·보상 (금색은 여기에만) ----
+    public static readonly Color Gold = H(0xD9B45F);         // 별점·레벨·S등급·돈 숫자 칸 띠
+    public static readonly Color GoldSoft = H(0x2D2717);
+    public static readonly Color GoldLight = H(0xE8C976);
+    public static readonly Color GoldDeep = H(0xB8903F);
+
+    // ---- 축구장 (밤 경기장) ----
+    public static readonly Color PitchTop = H(0x0F3631), PitchBottom = H(0x0B2623), PitchText = H(0xDCE3E8);
+
+    // 채권 / 지수 / 배당 / 개별주
+    public static readonly Color[] CatColors = { H(0x7CA4E2), H(0xA694F4), H(0x45C9A0), H(0xE6A25C) };
+
+    // 능력치 1~20 단계 색: 낮음 주황(빨강 아님 — 빨강은 '오름'으로 읽힌다) → 보통 회색 → 좋음 연두 → 최고 초록
+    public static readonly Color[] Attr = { H(0xFF8F45), H(0x8E9BB4), H(0xA3D36C), H(0x3FCB99) };
+
+    // 시즌 등급 색 (S 금, A 초록, B 남보라, C 회색, D·F 주황 — 빨강은 상승이라 쓰지 않는다)
     public static Color GradeColor(string g) => g switch
     {
-        "S" => Gold, "A" => Color.FromArgb(52, 211, 153), "B" => Color.FromArgb(96, 165, 250),
-        "C" => Color.FromArgb(161, 161, 170), "D" => Color.FromArgb(251, 146, 60), _ => Color.FromArgb(248, 113, 113),
-    };
-    // 채권 / 지수 / 배당 / 개별주
-    public static readonly Color[] CatColors =
-    {
-        Color.FromArgb(96, 165, 250), Color.FromArgb(167, 139, 250), Color.FromArgb(52, 211, 153), Color.FromArgb(251, 191, 36),
+        "S" => Gold, "A" => Good, "B" => AccentText, "C" => TextSoft, _ => Bad,
     };
 
+    // 두 색 섞기 (불투명 글자 색 만들 때)
+    public static Color Mix(Color a, Color b, double t) =>
+        Color.FromArgb((int)(a.R + (b.R - a.R) * t), (int)(a.G + (b.G - a.G) * t), (int)(a.B + (b.B - a.B) * t));
+
+    // ---- 글꼴: 맑은 고딕 (숫자 폭이 같아 표가 흔들리지 않는다). 크기는 96dpi에서 정수 픽셀 ----
     const string Face = "맑은 고딕";
-    public static readonly Font Body = new(Face, 9.5F);
-    public static readonly Font Bold = new(Face, 9.5F, FontStyle.Bold);
-    public static readonly Font Small = new(Face, 8.5F);
-    public static readonly Font H1 = new(Face, 16F, FontStyle.Bold);
+    public static readonly Font Body = new(Face, 9.75F);
+    public static readonly Font Bold = new(Face, 9.75F, FontStyle.Bold);
+    public static readonly Font Small = new(Face, 9F);
+    public static readonly Font SmallBold = new(Face, 9F, FontStyle.Bold);
+    public static readonly Font H1 = new(Face, 16.5F, FontStyle.Bold);
     public static readonly Font H2 = new(Face, 10.5F, FontStyle.Bold);
     public static readonly Font Nav = new(Face, 10.5F);
-    public static readonly Font Kpi = new(Face, 15F, FontStyle.Bold);
-    public static readonly Font Logo = new(Face, 14F, FontStyle.Bold);
+    public static readonly Font NavBold = new(Face, 10.5F, FontStyle.Bold);
+    public static readonly Font Kpi = new(Face, 16.5F, FontStyle.Bold);
+    public static readonly Font KpiSmall = new(Face, 13.5F, FontStyle.Bold); // 칸이 좁을 때
+    public static readonly Font Logo = new(Face, 13.5F, FontStyle.Bold);
+    public static readonly Font Wordmark = new(FontFamily.Families.Any(f => f.Name == "Segoe UI Semibold") ? "Segoe UI Semibold" : "Segoe UI", 8.25F);
     public static readonly Font Search = new(Face, 12F);
     public static readonly Font Icon = new(FontFamily.Families.Any(f => f.Name == "Segoe Fluent Icons") ? "Segoe Fluent Icons" : "Segoe MDL2 Assets", 12F);
 
@@ -59,27 +102,17 @@ static class Theme
         Padding = new Padding(0, 7, 6, 0), BackColor = Color.Transparent,
     };
 
-    static Button Btn(string text, Color bg, Color fg)
+    static Button Btn(string text, RoundButton.Kinds kind) => new RoundButton
     {
-        var b = new RoundButton
-        {
-            Text = text, AutoSize = true, Height = 36, MinimumSize = new Size(0, 36), Padding = new Padding(18, 0, 18, 0),
-            FlatStyle = FlatStyle.Flat, BackColor = bg, ForeColor = fg, Font = Bold, Cursor = Cursors.Hand,
-            Margin = new Padding(0, 0, 8, 0), UseVisualStyleBackColor = false,
-        };
-        b.FlatAppearance.BorderSize = bg == InputBg ? 1 : 0;
-        b.FlatAppearance.BorderColor = Border;
-        b.EnabledChanged += (_, _) =>
-        {
-            b.BackColor = b.Enabled ? bg : Disabled;
-            b.ForeColor = b.Enabled ? fg : Muted;
-        };
-        return b;
-    }
+        Text = text, Kind = kind, AutoSize = true, Height = 36, MinimumSize = new Size(0, 36), Padding = new Padding(18, 0, 18, 0),
+        FlatStyle = FlatStyle.Flat, Font = Bold, Cursor = Cursors.Hand, Margin = new Padding(0, 0, 8, 0), UseVisualStyleBackColor = false,
+        BackColor = kind == RoundButton.Kinds.Primary ? Accent : InputBg, ForeColor = kind == RoundButton.Kinds.Primary ? Color.White : Text,
+    };
 
-    public static Button Primary(string text) => Btn(text, Accent, Color.White);
-    public static Button Danger(string text) => Btn(text, Bad, Color.White);
-    public static Button Secondary(string text) => Btn(text, InputBg, Text);
+    public static Button Primary(string text) => Btn(text, RoundButton.Kinds.Primary);   // 할 일 (남보라)
+    public static Button Danger(string text) => Btn(text, RoundButton.Kinds.Danger);     // 되돌리기 어려운 일 (주황 테두리)
+    public static Button Secondary(string text) => Btn(text, RoundButton.Kinds.Secondary);
+    public static Button Reward(string text) => Btn(text, RoundButton.Kinds.Reward);     // 보상·결산 (금색)
 
     // 입력칸·라디오 등 기본 컨트롤을 어두운 색으로
     public static void StyleInput(Control c)
@@ -88,6 +121,7 @@ static class Theme
         c.ForeColor = Text;
         if (c is TextBox t) t.BorderStyle = BorderStyle.FixedSingle;
         if (c is NumericUpDown n) n.BorderStyle = BorderStyle.FixedSingle;
+        if (c is ComboBox cb) cb.FlatStyle = FlatStyle.Flat; // 밝은 기본 모양 대신 어두운 평면
     }
 
     public static void StyleGrid(DataGridView g)
@@ -95,24 +129,32 @@ static class Theme
         g.BackgroundColor = CardBg;
         g.BorderStyle = BorderStyle.None;
         g.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
-        g.GridColor = Border;
+        g.GridColor = GridLine;
         g.EnableHeadersVisualStyles = false;
         g.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
         g.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
         g.ColumnHeadersHeight = 34;
         g.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
         {
-            BackColor = HeaderBg, ForeColor = Muted, Font = Bold, SelectionBackColor = HeaderBg, SelectionForeColor = Muted,
-            Padding = new Padding(4, 0, 4, 0),
+            BackColor = HeaderBg, ForeColor = Muted, Font = SmallBold, SelectionBackColor = HeaderBg, SelectionForeColor = Muted,
+            Padding = new Padding(8, 0, 8, 0),
         };
         g.DefaultCellStyle = new DataGridViewCellStyle
         {
             BackColor = CardBg, ForeColor = Text, Font = Body, SelectionBackColor = AccentSoft, SelectionForeColor = Text,
-            Padding = new Padding(4, 0, 4, 0),
+            Padding = new Padding(8, 0, 8, 0),
         };
         g.AlternatingRowsDefaultCellStyle.BackColor = AltRow;
-        g.RowTemplate.Height = 30;
+        g.RowTemplate.Height = 32;
         g.RowHeadersVisible = false;
+        // 고른 줄은 왼쪽에 남보라 막대 (채운 색만으로는 잘 안 보인다)
+        g.RowPostPaint += (_, e) =>
+        {
+            if (!e.State.HasFlag(DataGridViewElementStates.Selected)) return;
+            float sc = g.DeviceDpi / 96f;
+            using var b = new SolidBrush(AccentText);
+            e.Graphics.FillRectangle(b, e.RowBounds.X, e.RowBounds.Y + 4 * sc, 3 * sc, e.RowBounds.Height - 8 * sc);
+        };
         // 스크롤 깜빡임 줄이기
         typeof(DataGridView).GetProperty("DoubleBuffered", BindingFlags.Instance | BindingFlags.NonPublic)?.SetValue(g, true);
         DarkScrollbars(g);
@@ -177,22 +219,46 @@ static class Theme
         return p;
     }
 
+    // 그래프 공통: 25·50·75% 점선 눈금, 마지막 점(카드색 테두리), 둥근 말풍선
+    public static void GuideLines(Graphics g, float left, float right, float top, float bottom, float s)
+    {
+        using var pen = new Pen(GridLine, 1) { DashStyle = DashStyle.Dash };
+        foreach (var f in new[] { 0.25f, 0.5f, 0.75f }) g.DrawLine(pen, left, top + (bottom - top) * f, right, top + (bottom - top) * f);
+    }
+
+    public static void EndDot(Graphics g, PointF p, Color c, float s)
+    {
+        float r = 4 * s;
+        using (var ring = new SolidBrush(CardBg)) g.FillEllipse(ring, p.X - r - 2 * s, p.Y - r - 2 * s, (r + 2 * s) * 2, (r + 2 * s) * 2);
+        using (var dot = new SolidBrush(c)) g.FillEllipse(dot, p.X - r, p.Y - r, r * 2, r * 2);
+    }
+
+    public static void Tooltip(Graphics g, RectangleF r, float s)
+    {
+        using var p = Round(r, 8 * s);
+        using (var b = new SolidBrush(InputBg)) g.FillPath(b, p);
+        using (var pen = new Pen(BorderHi)) g.DrawPath(pen, p);
+    }
+
     public static Color LabelColor(string label) => label switch
     {
-        "고배당" or "초고배당" or "꾸준배당" => Color.FromArgb(52, 211, 153),
-        "가치주" or "저PER" or "저PBR" => Color.FromArgb(96, 165, 250),
-        "고ROE" or "성장주" or "가치 점수 우수" => Color.FromArgb(167, 139, 250),
-        "재무건전" or "흑자 지속" => Color.FromArgb(45, 212, 191),
+        "고배당" or "초고배당" or "꾸준배당" => Good,
+        "가치주" or "저PER" or "저PBR" => CatColors[0],
+        "고ROE" or "성장주" or "가치 점수 우수" => CatColors[1],
+        "재무건전" or "흑자 지속" => Teal,
         "급등" => Up,
         "급락" => Down,
-        "거래대금 상위" => Color.FromArgb(251, 191, 36),
+        "거래대금 상위" => Gold,
         _ => Muted,
     };
 }
 
-// 모서리가 둥근 어두운 카드 + 1px 테두리. 제목이 있으면 위에 붙는다.
+// 둥근 카드: 아래로 옅은 그림자, 1px 테두리, 위쪽 안쪽에 아주 옅은 빛. 제목이 있으면 제목 아래 구분선.
+// 몸통은 단색이어야 한다 (표·그래프가 같은 색으로 자기 영역을 지우므로 그라데이션이면 이음매가 보인다).
 class Card : Panel
 {
+    readonly Label title;
+
     public Card(string title = null, Control content = null)
     {
         BackColor = Theme.CardBg;
@@ -203,94 +269,152 @@ class Card : Panel
         if (content != null) { content.Dock = DockStyle.Fill; Controls.Add(content); }
         if (title != null)
         {
-            Controls.Add(new Panel { Dock = DockStyle.Top, Height = 6 });
-            Controls.Add(new Label { Text = title, Dock = DockStyle.Top, Height = 24, Font = Theme.H2, ForeColor = Theme.Text });
+            Controls.Add(new Panel { Dock = DockStyle.Top, Height = 8, BackColor = Color.Transparent });
+            Controls.Add(this.title = new Label { Text = title, Dock = DockStyle.Top, Height = 24, Font = Theme.H2, ForeColor = Theme.Text, BackColor = Color.Transparent, AutoEllipsis = true });
         }
     }
 
-    // 바깥 모서리는 부모 배경색으로 칠하고 그 위에 둥근 카드를 그린다 (안쪽 내용은 여백 안에 있어 모서리를 가리지 않는다)
+    protected GraphicsPath Body(float s) => Theme.Round(new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 3.5f * s), 12 * s);
+
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
         float s = DeviceDpi / 96f;
         g.Clear(Parent?.BackColor ?? Theme.Bg);
+        if (Width < 24 * s || Height < 24 * s) return;
         g.SmoothingMode = SmoothingMode.AntiAlias;
-        using var path = Theme.Round(new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f), 14 * s);
+        using var path = Body(s);
+        // 그림자 두 겹
+        using (var sh = (GraphicsPath)path.Clone())
+        {
+            using var m = new Matrix(); m.Translate(0, 2 * s); sh.Transform(m);
+            using (var b = new SolidBrush(Color.FromArgb(50, 2, 5, 12))) g.FillPath(b, sh);
+            using var m1 = new Matrix(); m1.Translate(0, -1 * s); sh.Transform(m1);
+            using (var b = new SolidBrush(Color.FromArgb(90, 2, 5, 12))) g.FillPath(b, sh);
+        }
         using (var fill = new SolidBrush(BackColor)) g.FillPath(fill, path);
-        using var pen = new Pen(Theme.Border);
-        g.DrawPath(pen, path);
+        PaintBody(g, path, s);
+        using (var pen = new Pen(Theme.Border)) g.DrawPath(pen, path);
+        // 위쪽 안쪽의 옅은 빛
+        using (var hi = new Pen(Color.FromArgb(18, 255, 255, 255))) g.DrawLine(hi, 12 * s, 1.5f, Width - 12 * s, 1.5f);
+        if (title != null && title.Visible)
+        {
+            float y = title.Bottom + 3 * s;
+            using var div = new Pen(Theme.GridLine);
+            g.DrawLine(div, Padding.Left, y, Width - Padding.Right, y);
+        }
     }
+
+    // 몸통 위에 더 그릴 것 (요약 숫자 칸의 그라데이션·띠)
+    protected virtual void PaintBody(Graphics g, GraphicsPath path, float s) { }
 
     protected override void OnResize(EventArgs e) { base.OnResize(e); Invalidate(); }
 }
 
-// 알약 모양 버튼. 마우스를 올리면 조금 밝아진다.
+// 버튼: 둥근 사각형 (고르는 칩·탭은 알약, 하는 버튼은 사각형이라 구별된다). 상태마다 정해진 색 — 밝게 하면 흰 글자 대비가 떨어진다.
 class RoundButton : Button
 {
-    bool hover;
+    public enum Kinds { Primary, Secondary, Danger, Reward }
+    public Kinds Kind = Kinds.Secondary;
+    bool hover, pressed;
 
     public RoundButton()
     {
         SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint, true);
         MouseEnter += (_, _) => { hover = true; Invalidate(); };
-        MouseLeave += (_, _) => { hover = false; Invalidate(); };
+        MouseLeave += (_, _) => { hover = pressed = false; Invalidate(); };
+        MouseDown += (_, _) => { pressed = true; Invalidate(); };
+        MouseUp += (_, _) => { pressed = false; Invalidate(); };
     }
+
+    protected override void OnEnabledChanged(EventArgs e) { base.OnEnabledChanged(e); Invalidate(); }
 
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
+        float s = DeviceDpi / 96f;
         g.Clear(Parent?.BackColor ?? Theme.Bg);
         g.SmoothingMode = SmoothingMode.AntiAlias;
-        using var path = Theme.Round(new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f), Height / 2f);
-        var bg = hover && Enabled ? ControlPaint.Light(BackColor, 0.15f) : BackColor;
-        using (var fill = new SolidBrush(bg)) g.FillPath(fill, path);
-        if (FlatAppearance.BorderSize > 0)
+        var r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
+        using var path = Theme.Round(r, 10 * s);
+        Color fg, border = Color.Empty;
+        Brush fill;
+        if (!Enabled) { fill = new SolidBrush(Theme.Disabled); fg = Theme.DisabledText; }
+        else switch (Kind)
         {
-            using var pen = new Pen(FlatAppearance.BorderColor);
-            g.DrawPath(pen, path);
+            case Kinds.Primary:
+                fill = pressed ? new SolidBrush(Theme.AccentPressed) : hover ? new SolidBrush(Theme.AccentHover)
+                     : new LinearGradientBrush(new RectangleF(0, 0, Width, Height + 1), Theme.AccentHover, Theme.Accent, 90f);
+                fg = Color.White;
+                break;
+            case Kinds.Danger:
+                fill = new SolidBrush(hover ? Theme.Mix(Theme.BadSoft, Theme.Bad, 0.16) : Theme.BadSoft);
+                border = Color.FromArgb(140, Theme.Bad); fg = Theme.Bad;
+                break;
+            case Kinds.Reward:
+                fill = new SolidBrush(hover ? Theme.Mix(Theme.GoldSoft, Theme.Gold, 0.14) : Theme.GoldSoft);
+                border = Color.FromArgb(120, Theme.Gold); fg = Theme.Gold;
+                break;
+            default:
+                fill = new SolidBrush(pressed ? Theme.Border : hover ? Theme.Mix(Theme.InputBg, Theme.BorderHi, 0.3) : Theme.InputBg);
+                border = hover ? Theme.BorderHi : Theme.Border; fg = Theme.Text;
+                break;
         }
-        TextRenderer.DrawText(g, Text, Font, ClientRectangle, ForeColor, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+        using (fill) g.FillPath(fill, path);
+        if (border != Color.Empty) using (var pen = new Pen(border)) g.DrawPath(pen, path);
+        if (Enabled && Kind == Kinds.Primary)
+            using (var hi = new Pen(Color.FromArgb(40, 255, 255, 255))) g.DrawLine(hi, 10 * s, 1.5f, Width - 10 * s, 1.5f);
+        if (Focused && ShowFocusCues)
+            using (var ring = new Pen(Theme.AccentText, 2 * s)) using (var fp = Theme.Round(RectangleF.Inflate(r, -1.5f * s, -1.5f * s), 9 * s)) g.DrawPath(ring, fp);
+        TextRenderer.DrawText(g, Text, Font, ClientRectangle, fg, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
     }
 }
 
-// 요약 숫자 카드
+// 요약 숫자 칸: 위에서 아래로 아주 옅은 그라데이션 + 위쪽 2px 띠 (돈·보상 칸은 금색, 나머지는 회색)
 class KpiTile : Card
 {
-    readonly Label value = new() { Dock = DockStyle.Top, Height = 34, Font = Theme.Kpi, ForeColor = Theme.Text, Text = "—" };
+    readonly Label value = new() { Dock = DockStyle.Top, Height = 38, Font = Theme.Kpi, ForeColor = Theme.Text, Text = "—", BackColor = Color.Transparent, AutoEllipsis = true };
     readonly Label caption, note;
+    public Color Strip = Theme.BorderHi;
 
     public KpiTile(string caption)
     {
-        Controls.Add(note = new Label { Dock = DockStyle.Top, Height = 20, Font = Theme.Small, ForeColor = Theme.Muted });
+        Padding = new Padding(18, 14, 18, 14);
+        Controls.Add(note = new Label { Dock = DockStyle.Top, Height = 20, Font = Theme.Small, ForeColor = Theme.Muted, BackColor = Color.Transparent, AutoEllipsis = true });
         Controls.Add(value);
-        Controls.Add(this.caption = new Label { Text = caption, Dock = DockStyle.Top, Height = 22, Font = Theme.Small, ForeColor = Theme.Muted });
+        Controls.Add(this.caption = new Label { Text = caption, Dock = DockStyle.Top, Height = 22, Font = Theme.Small, ForeColor = Theme.Muted, BackColor = Color.Transparent, AutoEllipsis = true });
     }
-
-    public Color Bar = Theme.Accent; // 왼쪽 강조 막대 색 (값 색이 있으면 그 색)
 
     public void Set(string text, Color? color = null, string note = null, string caption = null)
     {
         value.Text = text;
         value.ForeColor = color ?? Theme.Text;
-        Bar = color ?? Theme.Accent;
         if (note != null) this.note.Text = note;
         if (caption != null) this.caption.Text = caption;
-        Invalidate();
+        FitValue();
     }
 
-    protected override void OnPaint(PaintEventArgs e)
+    void FitValue()
     {
-        base.OnPaint(e);
-        float s = DeviceDpi / 96f;
-        if (Height < 30 * s) return;
-        e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-        using var p = Theme.Round(new RectangleF(1.5f * s, 16 * s, 3 * s, Height - 32 * s), 1.5f * s);
-        using var b = new SolidBrush(Color.FromArgb(200, Bar));
-        e.Graphics.FillPath(b, p);
+        if (value.Width <= 0) return;
+        var f = TextRenderer.MeasureText(value.Text, Theme.Kpi).Width <= value.Width ? Theme.Kpi
+              : TextRenderer.MeasureText(value.Text, Theme.KpiSmall).Width <= value.Width ? Theme.KpiSmall : Theme.H2;
+        if (value.Font != f) value.Font = f;
+    }
+
+    protected override void OnResize(EventArgs e) { base.OnResize(e); FitValue(); }
+
+    protected override void PaintBody(Graphics g, GraphicsPath path, float s)
+    {
+        using (var grad = new LinearGradientBrush(new RectangleF(0, 0, Width, Height), Theme.CardTop, Theme.CardBg, 90f)) g.FillPath(grad, path);
+        var clip = g.Clip;
+        g.SetClip(path);
+        using (var b = new SolidBrush(Strip)) g.FillRectangle(b, 14 * s, 0, Width - 28 * s, 2 * s);
+        g.Clip = clip;
     }
 }
 
-// 둥근 알약 모양 라벨/칩. Selectable이면 클릭으로 켜고 끈다.
+// 알약 칩·탭. 중립(글자색 Tint = Text): 선택하면 남보라. 색 칩: 옅은 색 바탕 + 섞은 글자색 (TextRenderer는 투명도를 무시하므로 불투명하게 섞는다).
 class Pill : Control
 {
     public Color Tint = Theme.Muted;
@@ -300,7 +424,7 @@ class Pill : Control
     public Pill(string text, Color? tint = null, bool clickable = false)
     {
         Text = text;
-        Font = Theme.Small;
+        Font = Theme.SmallBold;
         if (tint != null) Tint = tint.Value;
         SetStyle(ControlStyles.SupportsTransparentBackColor | ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint, true);
         BackColor = Color.Transparent;
@@ -318,10 +442,17 @@ class Pill : Control
     {
         var t = TextRenderer.MeasureText(Text, Font);
         float s = DeviceDpi / 96f;
-        return new Size(t.Width + (int)(16 * s), t.Height + (int)(8 * s));
+        return new Size(t.Width + (int)(14 * s), t.Height + (int)(6 * s));
     }
 
     protected override void OnTextChanged(EventArgs e) { base.OnTextChanged(e); Size = GetPreferredSize(Size.Empty); Invalidate(); }
+
+    // 글자로 잰 크기는 이미 화면 배율이 들어가 있으므로, 창 배율 조정 때 다시 키우지 않고 글자로 다시 잰다
+    protected override void ScaleControl(SizeF factor, BoundsSpecified specified)
+    {
+        base.ScaleControl(factor, specified);
+        Size = GetPreferredSize(Size.Empty);
+    }
 
     // 화면 읽기 프로그램·UI 자동화에서 버튼으로 보이고 누를 수 있게
     protected override AccessibleObject CreateAccessibilityInstance() => new PillAccessible(this);
@@ -342,11 +473,22 @@ class Pill : Control
         g.SmoothingMode = SmoothingMode.AntiAlias;
         var r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
         using var path = Theme.Round(r, Height / 2f);
-        int alpha = Selected ? 90 : hover ? 60 : 32;
-        using (var fill = new SolidBrush(Color.FromArgb(alpha, Tint))) g.FillPath(fill, path);
-        using (var pen = new Pen(Color.FromArgb(Selected ? 220 : 110, Tint))) g.DrawPath(pen, path);
-        TextRenderer.DrawText(g, Text, Font, ClientRectangle, Selected ? Color.White : Color.FromArgb(235, Tint),
-            TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+        Color fill, border, fg;
+        if (Tint == Theme.Text) // 중립: 필터·선택지
+        {
+            fill = Selected ? Theme.AccentSoft : hover ? Theme.InputBg : Color.Empty;
+            border = Selected ? Color.FromArgb(150, Theme.AccentText) : hover ? Theme.BorderHi : Theme.Border;
+            fg = Selected || hover ? Theme.Text : Theme.TextSoft;
+        }
+        else
+        {
+            fill = Color.FromArgb(Selected ? 56 : hover ? 44 : 30, Tint);
+            border = Color.FromArgb(Selected ? 200 : 100, Tint);
+            fg = Selected ? Theme.Text : Theme.Mix(Tint, Color.White, 0.24);
+        }
+        if (fill != Color.Empty) using (var b = new SolidBrush(fill)) g.FillPath(b, path);
+        using (var pen = new Pen(border)) g.DrawPath(pen, path);
+        TextRenderer.DrawText(g, Text, Font, ClientRectangle, fg, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
     }
 }
 
@@ -360,7 +502,7 @@ class NavItem : Control
     {
         Glyph = glyph;
         Text = title;
-        Height = 46;
+        Height = 44;
         Dock = DockStyle.Top;
         Cursor = Cursors.Hand;
         SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint, true);
@@ -391,19 +533,18 @@ class NavItem : Control
         g.SmoothingMode = SmoothingMode.AntiAlias;
         if (active || hover)
         {
-            using var path = Theme.Round(new RectangleF(10 * s, 3 * s, Width - 20 * s, Height - 6 * s), 12 * s);
+            using var path = Theme.Round(new RectangleF(10 * s, 3 * s, Width - 20 * s, Height - 6 * s), 10 * s);
             using var b = new SolidBrush(active ? Theme.AccentSoft : Theme.SidebarHover);
             g.FillPath(b, path);
         }
         if (active)
-        {
-            using var bar = new SolidBrush(Theme.Accent);
-            g.FillRectangle(bar, 10 * s, Height / 2f - 9 * s, 3 * s, 18 * s);
-        }
-        var fg = active ? Color.White : Theme.SidebarText;
-        TextRenderer.DrawText(g, Glyph, Theme.Icon, new Rectangle((int)(24 * s), 0, (int)(28 * s), Height), fg,
+            using (var bar = Theme.Round(new RectangleF(4 * s, Height / 2f - 10 * s, 3 * s, 20 * s), 1.5f * s))
+            using (var b = new SolidBrush(Theme.AccentText)) g.FillPath(b, bar);
+        var icon = active ? Theme.AccentText : hover ? Theme.Text : Theme.SidebarText;
+        var fg = active || hover ? Theme.Text : Theme.SidebarText;
+        TextRenderer.DrawText(g, Glyph, Theme.Icon, new Rectangle((int)(24 * s), 0, (int)(28 * s), Height), icon,
             TextFormatFlags.VerticalCenter | TextFormatFlags.HorizontalCenter);
-        TextRenderer.DrawText(g, Text, active ? Theme.H2 : Theme.Nav, new Rectangle((int)(60 * s), 0, Width, Height), fg,
+        TextRenderer.DrawText(g, Text, active ? Theme.NavBold : Theme.Nav, new Rectangle((int)(60 * s), 0, Width, Height), fg,
             TextFormatFlags.VerticalCenter | TextFormatFlags.Left);
     }
 }
@@ -456,6 +597,7 @@ class PriceChart : Control
         double first = data[0].Close, last = data[^1].Close, chg = (last / first - 1) * 100;
         var color = chg >= 0 ? Theme.Up : Theme.Down;
         g.SmoothingMode = SmoothingMode.AntiAlias;
+        Theme.GuideLines(g, left, right, top, bottom, s);
         var pts = Enumerable.Range(0, data.Count).Select(P).ToArray();
         using (var area = new GraphicsPath())
         {
@@ -466,10 +608,11 @@ class PriceChart : Control
             using var fill = new LinearGradientBrush(new RectangleF(0, top, Width, bottom - top + 1), Color.FromArgb(70, color), Color.FromArgb(0, color), 90f);
             g.FillPath(fill, area);
         }
-        using (var pen = new Pen(color, 1.8f * s)) g.DrawLines(pen, pts);
+        using (var pen = new Pen(color, 2f * s) { LineJoin = LineJoin.Round }) g.DrawLines(pen, pts);
+        Theme.EndDot(g, pts[^1], color, s);
 
         // 기간 등락률(왼쪽 위), 최고·최저(오른쪽 위), 시작·끝 날짜(아래)
-        TextRenderer.DrawText(g, $"{chg:+0.00;-0.00;0.00}%", Theme.Bold, new Point((int)left, 0), color);
+        TextRenderer.DrawText(g, $"{(chg >= 0 ? "▲" : "▼")} {chg:+0.00;-0.00;0.00}%", Theme.Bold, new Point((int)left, 0), color);
         TextRenderer.DrawText(g, $"최고 {Money(max)}  ·  최저 {Money(min)}", Theme.Small,
             new Rectangle(0, (int)(2 * s), (int)right, (int)(18 * s)), Theme.Muted, TextFormatFlags.Right);
         TextRenderer.DrawText(g, data[0].Date.ToString("yy.MM.dd"), Theme.Small, new Point((int)left, (int)(bottom + 2 * s)), Theme.Muted);
@@ -486,8 +629,7 @@ class PriceChart : Control
             string tip = $"{data[hover].Date:yyyy.MM.dd}  {Money(data[hover].Close)}";
             var size = TextRenderer.MeasureText(tip, Theme.Small);
             float tx = Math.Clamp(hp.X - size.Width / 2f, 0, Width - size.Width), ty = top;
-            using var bg = new SolidBrush(Theme.InputBg);
-            g.FillRectangle(bg, tx - 4, ty - 2, size.Width + 8, size.Height + 4);
+            Theme.Tooltip(g, new RectangleF(tx - 6, ty - 3, size.Width + 12, size.Height + 6), s);
             TextRenderer.DrawText(g, tip, Theme.Small, new Point((int)tx, (int)ty), Theme.Text);
         }
     }
@@ -531,6 +673,7 @@ class SimChart : Control
         PointF P(int i, double v) => new(left + (right - left) * i / (pts.Count - 1), bottom - (float)((v - min) / (max - min)) * (bottom - top));
         g.SmoothingMode = SmoothingMode.AntiAlias;
 
+        Theme.GuideLines(g, left, right, top, bottom, s);
         var val = Enumerable.Range(0, pts.Count).Select(i => P(i, pts[i].Value + pts[i].DivCash)).ToArray();
         var color = pts[^1].Value + pts[^1].DivCash >= pts[^1].Principal ? Theme.Up : Theme.Down;
         using (var area = new GraphicsPath())
@@ -542,7 +685,8 @@ class SimChart : Control
             using var fill = new LinearGradientBrush(new RectangleF(0, top, Width, bottom - top + 1), Color.FromArgb(60, color), Color.FromArgb(0, color), 90f);
             g.FillPath(fill, area);
         }
-        using (var pen = new Pen(color, 2f * s)) g.DrawLines(pen, val);
+        using (var pen = new Pen(color, 2f * s) { LineJoin = LineJoin.Round }) g.DrawLines(pen, val);
+        Theme.EndDot(g, val[^1], color, s);
         using (var dash = new Pen(Theme.Muted, 1.5f * s) { DashStyle = DashStyle.Dash })
             g.DrawLines(dash, Enumerable.Range(0, pts.Count).Select(i => P(i, pts[i].Principal)).ToArray());
 
@@ -562,8 +706,7 @@ class SimChart : Control
             string tip = $"{p.Month:yyyy.MM}  평가 {Won(p.Value + p.DivCash)}원 · 원금 {Won(p.Principal)}원 · {(p.Value + p.DivCash) / Math.Max(1, p.Principal) * 100 - 100:+0.0;-0.0}%";
             var size = TextRenderer.MeasureText(tip, Theme.Small);
             float tx = Math.Clamp(hp.X - size.Width / 2f, 0, Width - size.Width);
-            using var bg = new SolidBrush(Theme.InputBg);
-            g.FillRectangle(bg, tx - 4, top - 2, size.Width + 8, size.Height + 4);
+            Theme.Tooltip(g, new RectangleF(tx - 6, top - 3, size.Width + 12, size.Height + 6), s);
             TextRenderer.DrawText(g, tip, Theme.Small, new Point((int)tx, (int)top), Theme.Text);
         }
     }
@@ -607,7 +750,7 @@ class BarSeries : Control
         float top = 14 * s, bottom = Height - 18 * s, h = bottom - top;
         float zeroY = top + (float)(max / (max - min)) * h;
         float slot = (float)Width / years.Count, bw = Math.Max(3, slot * 0.6f);
-        using var axis = new Pen(Theme.Border);
+        using var axis = new Pen(Theme.GridLine);
         g.DrawLine(axis, 0, zeroY, Width, zeroY);
         for (int i = 0; i < years.Count; i++)
         {
@@ -650,7 +793,7 @@ class WeightChart : Control
         int labelW = (int)(48 * s), valueW = (int)(150 * s), barX = labelW, barW = Math.Max(40, Width - labelW - valueW - 8);
         const double scale = 60; // 막대 끝 = 60%
         using var text = new SolidBrush(Theme.Text);
-        using var band = new SolidBrush(Color.FromArgb(52, 52, 58));
+        using var band = new SolidBrush(Theme.BorderHi);
         using var track = new SolidBrush(Theme.InputBg);
         using var tick = new Pen(Theme.Text, 2);
 
@@ -691,8 +834,29 @@ class DarkMenuColors : ProfessionalColorTable
     public override Color MenuItemSelected => Theme.AccentSoft;
     public override Color MenuItemSelectedGradientBegin => Theme.AccentSoft;
     public override Color MenuItemSelectedGradientEnd => Theme.AccentSoft;
-    public override Color SeparatorDark => Theme.Border;
+    public override Color SeparatorDark => Theme.GridLine;
     public override Color ImageMarginGradientBegin => Theme.CardBg;
     public override Color ImageMarginGradientMiddle => Theme.CardBg;
     public override Color ImageMarginGradientEnd => Theme.CardBg;
+}
+
+// 앱 문양: 남색 둥근 사각형 + 금색 돛(오르는 선이기도 한 항해) + 남보라 물결. 사이드바 로고에 쓴다 (앱 아이콘과 같은 그림).
+static class Emblem
+{
+    public static void Draw(Graphics g, RectangleF r)
+    {
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        float w = r.Width;
+        using (var p = Theme.Round(r, w * 0.24f))
+        {
+            using (var bg = new LinearGradientBrush(r, Color.FromArgb(0x1B, 0x24, 0x40), Color.FromArgb(0x12, 0x1A, 0x2E), 90f)) g.FillPath(bg, p);
+            using (var pen = new Pen(Color.FromArgb(120, Theme.Gold))) g.DrawPath(pen, p);
+        }
+        // 돛: 왼쪽 아래에서 오른쪽 위로 솟는 직각삼각형
+        var sail = new[] { new PointF(r.X + w * 0.24f, r.Y + w * 0.70f), new PointF(r.X + w * 0.62f, r.Y + w * 0.70f), new PointF(r.X + w * 0.62f, r.Y + w * 0.18f) };
+        using (var gold = new LinearGradientBrush(new RectangleF(r.X, r.Y + w * 0.18f, w, w * 0.52f), Theme.GoldLight, Theme.GoldDeep, 90f)) g.FillPolygon(gold, sail);
+        // 물결
+        using var wave = new Pen(Theme.AccentHover, Math.Max(1.5f, w * 0.07f)) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+        g.DrawBezier(wave, r.X + w * 0.18f, r.Y + w * 0.80f, r.X + w * 0.38f, r.Y + w * 0.72f, r.X + w * 0.58f, r.Y + w * 0.88f, r.X + w * 0.82f, r.Y + w * 0.78f);
+    }
 }

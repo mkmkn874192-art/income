@@ -62,7 +62,7 @@ public partial class MainForm : Form
     readonly NumericUpDown numAddQty = new() { Minimum = 1, Maximum = 10_000_000, Value = 10, Width = 90, ThousandsSeparator = true };
     readonly Button btnAdd = Theme.Primary("배당 수입에 담기");
     readonly BarSeries niChart = new(Theme.Accent, "억", 1e8);
-    readonly BarSeries dpsChart = new(Color.FromArgb(52, 211, 153), "원", 1);
+    readonly BarSeries dpsChart = new(Theme.Good, "원", 1);
 
     // ----- 스크리닝 -----
     readonly NumericUpDown numPrice = new() { Minimum = 0, Maximum = 10_000_000, Increment = 1000, Value = 5000, Width = 100, ThousandsSeparator = true };
@@ -104,8 +104,30 @@ public partial class MainForm : Form
     // ----- 레이아웃 -----
     readonly Panel content = new() { Dock = DockStyle.Fill, BackColor = Theme.Bg };
     readonly List<(NavItem nav, Control page)> pages = new();
+
+    // --shot 점검용: 화면 밖 1600×1000 창
+    public void PrepareShot()
+    {
+        WindowState = FormWindowState.Normal;
+        StartPosition = FormStartPosition.Manual;
+        Bounds = new Rectangle(-4000, -4000, 1600, 1000);
+    }
+
+    public async Task ShotAll(string dir)
+    {
+        Directory.CreateDirectory(dir);
+        await Task.Delay(9000); // 저장된 시세·배당 불러오기
+        for (int i = 0; i < pages.Count; i++)
+        {
+            ShowPage(i);
+            await Task.Delay(i == PMasters || i == PGame ? 6000 : 1500);
+            using var bmp = new Bitmap(ClientSize.Width, ClientSize.Height);
+            DrawToBitmap(bmp, new Rectangle(Point.Empty, ClientSize));
+            bmp.Save(Path.Combine(dir, $"{i:00}.png"));
+        }
+    }
     readonly ProfileCard profileCard = new();
-    readonly Label modeBadge = new() { Dock = DockStyle.Bottom, Height = 48, TextAlign = ContentAlignment.MiddleCenter, Font = Theme.Bold };
+    readonly Label modeBadge = new() { Dock = DockStyle.Bottom, Height = 52, TextAlign = ContentAlignment.MiddleCenter, Font = Theme.Bold, BackColor = Theme.Sidebar };
 
     public MainForm()
     {
@@ -127,6 +149,8 @@ public partial class MainForm : Form
         if (Theme.AppIcon != null) Icon = Theme.AppIcon;
 
         foreach (var g in new[] { grid, gridMarket, gridSum, gridHold, gridPlan }) Theme.StyleGrid(g);
+        // 돈·보상을 보여 주는 요약 칸은 위 띠를 금색으로
+        foreach (var k in new[] { kYear, kMonth, kCartDiv, kCartLevel, kMsDiv, kSimDiv, kGameDiv, kGameSeason }) k.Strip = Theme.Gold;
         foreach (Control c in new Control[] { txtGo, txtDart, txtAppKey, txtSecret, txtEcos, numPrice, numCap, rdoMock, rdoReal, numAddQty }) Theme.StyleInput(c);
         rdoReal.ForeColor = Theme.Bad;
         Theme.DarkScrollbars(txtLog);
@@ -208,15 +232,24 @@ public partial class MainForm : Form
     Control BuildSidebar()
     {
         var side = new Panel { Dock = DockStyle.Left, Width = 220, BackColor = Theme.Sidebar };
-        var logo = new Panel { Dock = DockStyle.Top, Height = 92, Padding = new Padding(24, 22, 0, 0) };
-        logo.Controls.Add(new Label { Text = AppEn, Dock = DockStyle.Top, Height = 22, Font = Theme.Small, ForeColor = Theme.Muted });
-        logo.Controls.Add(new Label { Text = AppName, Dock = DockStyle.Top, Height = 34, Font = Theme.Logo, ForeColor = Color.White });
+        // 로고: 왼쪽에 앱 아이콘과 같은 돛 문양, 오른쪽에 이름(흰색)과 영문 이름(금색), 아래 구분선
+        var logo = new Panel { Dock = DockStyle.Top, Height = 92, Padding = new Padding(64, 22, 0, 0) };
+        logo.Controls.Add(new Label { Text = AppEn, Dock = DockStyle.Top, Height = 20, Font = Theme.Wordmark, ForeColor = Theme.Gold, BackColor = Color.Transparent });
+        logo.Controls.Add(new Label { Text = AppName, Dock = DockStyle.Top, Height = 30, Font = Theme.Logo, ForeColor = Theme.Text, BackColor = Color.Transparent });
+        logo.Paint += (_, e) =>
+        {
+            float sc = logo.DeviceDpi / 96f;
+            Emblem.Draw(e.Graphics, new RectangleF(22 * sc, 26 * sc, 32 * sc, 32 * sc));
+            using var div = new Pen(Theme.GridLine);
+            e.Graphics.DrawLine(div, 20 * sc, logo.Height - 1, logo.Width - 20 * sc, logo.Height - 1);
+        };
         // 어느 화면에서든 종목 찾기 → 시장에서 보기 / 배당 수입 / 대가 따라하기 / 시뮬레이터에 추가
         var find = new Panel { Dock = DockStyle.Top, Height = 50, Padding = new Padding(14, 0, 14, 14) };
         var picker = new StockPicker(SearchRows, "종목 찾기 · 추가") { Dock = DockStyle.Fill };
         picker.Picked += r => OnGlobalPick(r, picker);
         find.Controls.Add(picker);
         side.Controls.Add(navPanel);
+        side.Controls.Add(new Panel { Dock = DockStyle.Right, Width = 1, BackColor = Theme.GridLine }); // 사이드바 오른쪽 경계
         // 내 정보: 어느 화면에서든 눌러서 연봉·생활비·대출·예적금을 바꾼다
         profileCard.Click += (_, _) => { ShowPage(PGame); OpenGameSetup(); };
         side.Controls.Add(profileCard);
@@ -800,10 +833,35 @@ public partial class MainForm : Form
 
     void UpdateModeBadge()
     {
-        modeBadge.Text = rdoReal.Checked ? "●  실전 계좌" : "●  모의투자";
-        modeBadge.ForeColor = rdoReal.Checked ? Theme.Bad : Theme.Good;
-        modeBadge.BackColor = rdoReal.Checked ? Color.FromArgb(40, 12, 12) : Color.FromArgb(10, 32, 18);
+        modeBadge.Text = rdoReal.Checked ? "실전 계좌" : "모의투자";
+        modeBadge.ForeColor = rdoReal.Checked ? Theme.Bad : Theme.TextSoft;
+        if (!modeBadgePainted)
+        {
+            modeBadgePainted = true;
+            // 둥근 배지: 실전 = 주황 테두리, 모의투자 = 초록 점
+            modeBadge.Paint += (_, e) =>
+            {
+                var g = e.Graphics;
+                float sc = modeBadge.DeviceDpi / 96f;
+                bool real = rdoReal.Checked;
+                g.Clear(Theme.Sidebar);
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                var box = new RectangleF(14 * sc, 8 * sc, modeBadge.Width - 28 * sc, modeBadge.Height - 16 * sc);
+                if (box.Width < 20 * sc) return;
+                using (var p = Theme.Round(box, 10 * sc))
+                {
+                    using (var b = new SolidBrush(real ? Theme.BadSoft : Theme.GoodSoft)) g.FillPath(b, p);
+                    using (var pen = new Pen(Color.FromArgb(real ? 140 : 90, real ? Theme.Bad : Theme.Good))) g.DrawPath(pen, p);
+                }
+                var size = TextRenderer.MeasureText(modeBadge.Text, Theme.Bold);
+                float dot = 8 * sc, total = dot + 8 * sc + size.Width, x = box.X + (box.Width - total) / 2, cy = box.Y + box.Height / 2;
+                using (var d = new SolidBrush(real ? Theme.Bad : Theme.Good)) g.FillEllipse(d, x, cy - dot / 2, dot, dot);
+                TextRenderer.DrawText(g, modeBadge.Text, Theme.Bold, new Point((int)(x + dot + 8 * sc), (int)(cy - size.Height / 2f)), modeBadge.ForeColor);
+            };
+        }
+        modeBadge.Invalidate();
     }
+    bool modeBadgePainted;
 
     // ================= 배당 수입 =================
 
@@ -832,7 +890,7 @@ public partial class MainForm : Form
             if (ColFormat.TryGetValue(n, out var f)) e.CellStyle.Format = f;
             if (n is "현재가" or "주당배당금" && gridIncome.Rows[e.RowIndex].Cells["통화"].Value as string == "USD") e.CellStyle.Format = "$#,##0.00";
             if (n is "수량" or "현재가" or "주당배당금") e.CellStyle.BackColor = Theme.InputBg; // 고칠 수 있는 칸
-            if (n is "연 배당(원)" or "월 배당(원)") { e.CellStyle.ForeColor = Color.FromArgb(52, 211, 153); e.CellStyle.Font = Theme.Bold; }
+            if (n is "연 배당(원)" or "월 배당(원)") { e.CellStyle.ForeColor = Theme.Good; e.CellStyle.Font = Theme.Bold; }
             if (n == "출처") e.CellStyle.ForeColor = Theme.Muted;
         };
         foreach (Control c in new Control[] { numGoal }) Theme.StyleInput(c);
@@ -862,7 +920,7 @@ public partial class MainForm : Form
             var g = e.Graphics;
             g.Clear(Theme.CardBg);
             using var track = new SolidBrush(Theme.InputBg);
-            using var fill = new SolidBrush(Color.FromArgb(52, 211, 153));
+            using var fill = new SolidBrush(Theme.Good);
             g.FillRectangle(track, 0, 2, goalBar.Width, goalBar.Height - 4);
             g.FillRectangle(fill, 0, 2, (float)(goalBar.Width * Math.Clamp(goalProgress, 0, 1)), goalBar.Height - 4);
         };
@@ -931,7 +989,7 @@ public partial class MainForm : Form
         double invested = incomeItems.Sum(i => i.Qty * i.Price * Market.Fx(i.Currency));
         double yield = invested > 0 ? annual / invested : 0;
         string tax = afterTax ? "세후" : "세전";
-        kYear.Set(Krw(annual), Color.FromArgb(52, 211, 153), $"{tax} 예상", "1년");
+        kYear.Set(Krw(annual), Theme.Good, $"{tax} 예상", "1년");
         kMonth.Set(Krw(annual / 12), null, "1년 ÷ 12 (월 평균)");
         kWeek.Set(Krw(annual / 52), null, "1년 ÷ 52");
         kDay.Set(Krw(annual / 365), null, "1년 ÷ 365");
@@ -1116,11 +1174,11 @@ public partial class MainForm : Form
             RoundSelection(e, (e.State & DrawItemState.Selected) != 0);
             g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
             var b = e.Bounds;
-            var green = Color.FromArgb(52, 211, 153);
+            var green = Theme.Good;
             // 왼쪽 동그라미: 해금 ✓ / 순서 번호
             var circle = new RectangleF(b.X + 10 * s, b.Y + 12 * s, 36 * s, 36 * s);
             using (var cb = new SolidBrush(r.Done ? green : Theme.InputBg)) g.FillEllipse(cb, circle);
-            TextRenderer.DrawText(g, r.Done ? "✓" : (e.Index + 1).ToString(), Theme.Bold, Rectangle.Round(circle), r.Done ? Color.FromArgb(10, 30, 20) : Theme.Muted,
+            TextRenderer.DrawText(g, r.Done ? "✓" : (e.Index + 1).ToString(), Theme.Bold, Rectangle.Round(circle), r.Done ? Theme.Ink : Theme.Muted,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
             int x = (int)(58 * s), right = b.Right - (int)(14 * s);
             TextRenderer.DrawText(g, r.Item.Name, Theme.Bold, new Point(b.X + x, b.Y + (int)(8 * s)), Theme.Text);
@@ -1214,12 +1272,12 @@ public partial class MainForm : Form
         int done = rows.Count(r => r.Done);
         double total = rows.Sum(r => r.Item.Monthly);
         var last = rows.LastOrDefault(r => r.Done);
-        kCartLevel.Set($"Lv.{done}", Color.FromArgb(250, 204, 21), last == null ? "배당 새싹 · 첫 해금을 노려 보세요" : $"{last.Item.Name}까지 배당으로");
-        kCartDone.Set($"{done} / {rows.Count}", done > 0 ? Color.FromArgb(52, 211, 153) : null, total > 0 ? $"지출의 {Math.Min(monthly, total) / total * 100:0}%를 배당이 해결" : "지출을 넣어 주세요");
+        kCartLevel.Set($"Lv.{done}", Theme.Gold, last == null ? "배당 새싹 · 첫 해금을 노려 보세요" : $"{last.Item.Name}까지 배당으로");
+        kCartDone.Set($"{done} / {rows.Count}", done > 0 ? Theme.Good : null, total > 0 ? $"지출의 {Math.Min(monthly, total) / total * 100:0}%를 배당이 해결" : "지출을 넣어 주세요");
         double free = Cart.Income - total;
         kLifeFree.Set(Cart.Income > 0 ? Krw(free) : "—", free >= 0 ? null : Theme.Bad,
             Cart.Income > 0 ? $"수입 {Krw(Cart.Income)} − 지출 {Krw(total)}" : "구단주 수입을 넣어 주세요");
-        kCartDiv.Set(Krw(monthly), Color.FromArgb(52, 211, 153), invested > 0 ? $"세후 배당률 {yield * 100:0.00}%" : "[재정재무 › 배당 수입]에 종목을 담아 주세요");
+        kCartDiv.Set(Krw(monthly), Theme.Good, invested > 0 ? $"세후 배당률 {yield * 100:0.00}%" : "[재정재무 › 배당 수입]에 종목을 담아 주세요");
         kCartSum.Set(Krw(total), null, $"{rows.Count}개 항목");
 
         int gained = Cart.NewlyUnlocked(done);
@@ -1606,7 +1664,7 @@ public partial class MainForm : Form
 
             kMsStart.Set(double.IsNaN(minStart) ? "—" : Krw(minStart), null, "모든 종목 1주 이상");
             kMsMonthly.Set(double.IsNaN(minMonthly) ? "1천만원 넘음" : Krw(minMonthly), null, "1주씩 사도 비중 유지");
-            kMsDiv.Set(Krw(monthDiv), Color.FromArgb(52, 211, 153), $"연 {divYield * 100:0.00}% · 최근 1년");
+            kMsDiv.Set(Krw(monthDiv), Theme.Good, $"연 {divYield * 100:0.00}% · 최근 1년");
             kMsCagr.Set($"{main.Cagr:+0.0;-0.0}%", main.Cagr >= 0 ? Theme.Up : Theme.Down, $"최대 낙폭 {main.Mdd:0.0}%");
             kMsWorst.Set($"{risk.WorstNow:+0.0;-0.0}%", risk.WorstNow >= 0 ? Theme.Up : Theme.Down, $"{risk.WorstMonth:yyyy.MM} 매수 → 지금");
 
@@ -1976,7 +2034,7 @@ public partial class MainForm : Form
             kSimFinal.Set(Krw(main.Final), null, $"넣은 원금 {Krw(main.Principal)}");
             kSimGain.Set($"{gain / 1e4:+#,0;-#,0}만원", gain >= 0 ? Theme.Up : Theme.Down, $"원금 대비 {gain / Math.Max(1, main.Principal) * 100:+0.0;-0.0}%");
             kSimCagr.Set($"{main.Cagr:+0.0;-0.0}%", main.Cagr >= 0 ? Theme.Up : Theme.Down, "적립 시점과 무관한 연평균");
-            kSimDiv.Set(Krw(main.DivTotal), Color.FromArgb(52, 211, 153), $"최근 1년 {Krw(main.Last12Div)} (월 {Krw(main.Last12Div / 12)})");
+            kSimDiv.Set(Krw(main.DivTotal), Theme.Good, $"최근 1년 {Krw(main.Last12Div)} (월 {Krw(main.Last12Div / 12)})");
             kSimMdd.Set($"{main.Mdd:0.0}%", Theme.Down, double.IsNaN(main.WorstYear) ? "1년 넘게 보유해야 '최악의 1년'을 계산해요" : $"최악의 1년 {main.WorstYear:+0.0;-0.0}%");
 
             // 기간별
@@ -2206,14 +2264,14 @@ public partial class MainForm : Form
                 e.CellStyle.Format = "0";
                 e.CellStyle.Font = Theme.Bold;
                 e.CellStyle.ForeColor = e.CellStyle.SelectionForeColor =
-                    v >= 70 ? Color.FromArgb(52, 211, 153) : v >= 50 ? Color.FromArgb(251, 191, 36) : Theme.Muted;
+                    v >= 70 ? Theme.Good : v >= 50 ? Theme.Gold : Theme.Muted;
             }
             else e.CellStyle.Format = "N0";
         }
         if (n == "흐름" && e.Value is string ph)
             e.CellStyle.ForeColor = e.CellStyle.SelectionForeColor = ph switch
             {
-                "강세 지속" => Theme.Up, "반등 시작" => Color.FromArgb(251, 191, 36), "조정 중" => Color.FromArgb(167, 139, 250), _ => Theme.Down,
+                "강세 지속" => Theme.Up, "반등 시작" => Theme.CatColors[3], "조정 중" => Theme.CatColors[1], _ => Theme.Down,
             };
     }
 
@@ -2294,12 +2352,12 @@ public partial class MainForm : Form
         Put(e.Group + "\n", Theme.Small, Theme.Muted);
         Put(e.Title + "\n", Theme.H1, Theme.Text);
         Put(e.Term + "\n", Theme.Body, Theme.Muted);
-        Put(e.Short + "\n\n", Theme.Bold, Color.FromArgb(96, 165, 250));
+        Put(e.Short + "\n\n", Theme.Bold, Theme.AccentText);
         foreach (var raw in e.Body.Split('\n'))
         {
             string line = raw.TrimEnd('\r');
             if (line.StartsWith("## ")) Put("\n" + line[3..] + "\n", Theme.H2, Theme.Text);
-            else Put(line + "\n", Theme.Body, line.StartsWith("•") ? Theme.Text : Color.FromArgb(212, 212, 216));
+            else Put(line + "\n", Theme.Body, line.StartsWith("•") ? Theme.Text : Theme.TextSoft);
         }
         rtbLearn.SelectionStart = 0;
         rtbLearn.ScrollToCaret();
@@ -2836,11 +2894,11 @@ public partial class MainForm : Form
                 break;
             case "배당%" when e.Value is double d:
                 e.CellStyle.Format = "0.00";
-                if (d >= 3) e.CellStyle.ForeColor = e.CellStyle.SelectionForeColor = Color.FromArgb(52, 211, 153); // 고배당 강조
+                if (d >= 3) e.CellStyle.ForeColor = e.CellStyle.SelectionForeColor = Theme.Good; // 고배당 강조
                 break;
             case "고점대비%" when e.Value is double h:
                 e.CellStyle.Format = "0.0";
-                if (h <= -30) e.CellStyle.ForeColor = e.CellStyle.SelectionForeColor = Color.FromArgb(251, 146, 60); // 많이 내린 종목
+                if (h <= -30) e.CellStyle.ForeColor = e.CellStyle.SelectionForeColor = Theme.Bad; // 많이 내린 종목
                 break;
             case "1년%" when e.Value is double y1:
                 e.CellStyle.Format = "+0.0;-0.0;0.0";
@@ -2850,7 +2908,7 @@ public partial class MainForm : Form
                 e.CellStyle.Format = "0";
                 e.CellStyle.Font = Theme.Bold;
                 e.CellStyle.ForeColor = e.CellStyle.SelectionForeColor =
-                    sc >= 70 ? Color.FromArgb(52, 211, 153) : sc >= 50 ? Color.FromArgb(251, 191, 36) : Theme.Muted;
+                    sc >= 70 ? Theme.Good : sc >= 50 ? Theme.Gold : Theme.Muted;
                 break;
             case "종목명":
                 e.CellStyle.Font = Theme.Bold;
@@ -2861,7 +2919,7 @@ public partial class MainForm : Form
                 e.CellStyle.ForeColor = e.CellStyle.SelectionForeColor = Scout.AttrColor((int)Math.Round(ov / 5));
                 break;
             case "포지션" when e.Value is string ps:
-                e.CellStyle.ForeColor = e.CellStyle.SelectionForeColor = ps switch { "수비" => Theme.CatColors[0], "중원" => Theme.CatColors[2], _ => Theme.Up };
+                e.CellStyle.ForeColor = e.CellStyle.SelectionForeColor = ps switch { "수비" => Theme.CatColors[0], "중원" => Theme.CatColors[2], _ => Theme.CatColors[3] };
                 break;
             case "종목코드" or "시장" or "업종" or "배당주기":
                 e.CellStyle.ForeColor = e.CellStyle.SelectionForeColor = Theme.Muted;
@@ -2903,7 +2961,7 @@ public partial class MainForm : Form
             : $"{d.Freq}배당 (연 {d.PerYear}회) · 최근 1년 정기배당 {money(d.Ttm)} · 연속 {d.Years}년 · 최근 5년 삭감 {d.Cuts}번" +
               (d.Growth3y is double g ? $" · 3년 배당 성장 연 {g:+0.0;-0.0}%" : "") + (d.Special ? " · ⚠ 특별배당 있음" : "");
         string score = r.Total is double t ? $"\r\n종합 점수 {t:0}점  ({r.ScoreNote})" : "\r\n종합 점수: 자료가 부족해요";
-        dDivInfo.SetText(head + score, Labels.IsStable(r) ? Color.FromArgb(52, 211, 153) : null);
+        dDivInfo.SetText(head + score, Labels.IsStable(r) ? Theme.Good : null);
     }
 
     static string PosShort(string pos) => pos switch { "수비수" => "수비", "미드필더" => "중원", "공격수" => "공격", _ => "" };
@@ -2932,7 +2990,7 @@ public partial class MainForm : Form
                              $"세후({tax * 100:0.#}%)  연 {perTenM * (1 - tax):N0}원 · 월 {perTenM * (1 - tax) / 12:N0}원\r\n" +
                              (q.IsUs ? $"주당 연 {Won.Price(dps.Value, q.Currency)} · 배당률 {yield * 100:0.00}% (Yahoo)" : $"주당 {dps:N0}원 · 현재가 기준 배당률 {yield * 100:0.00}%") +
                              (MaybeSpecial(code) ? "\r\n⚠ 지난 결산 배당이 평소의 2배 이상 — 일회성 특별배당일 수 있어요" : ""),
-                             MaybeSpecial(code) ? Color.FromArgb(251, 191, 36) : null);
+                             MaybeSpecial(code) ? Theme.Gold : null);
         }
         else
         {
@@ -3043,8 +3101,8 @@ public partial class MainForm : Form
         }
         if (col == "점수" && e.Value is int score)
         {
-            e.CellStyle.BackColor = score >= 7 ? Color.FromArgb(20, 83, 45)
-                                  : score >= 5 ? Color.FromArgb(113, 63, 18)
+            e.CellStyle.BackColor = score >= 7 ? Theme.GoodSoft
+                                  : score >= 5 ? Theme.GoldSoft
                                   : e.CellStyle.BackColor;
             e.CellStyle.Font = boldFont ??= new Font(grid.Font, FontStyle.Bold);
             e.CellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;

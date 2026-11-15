@@ -15,7 +15,7 @@ public partial class MainForm
     readonly KpiTile kGameTotal = new("총자산"), kGameCash = new("현금"), kGameGain = new("손익 (넣은 돈 대비)"), kGameDiv = new("받은 배당 (세후)"), kGameSeason = new("이번 시즌");
     readonly DataGridView gridGame = NewGrid(true);
     readonly TermText txtGameNews = new() { Dock = DockStyle.Fill };
-    readonly Panel gameStartPanel = new() { Dock = DockStyle.Top, Height = 470 }, gameMainPanel = new() { Dock = DockStyle.Fill };
+    readonly Panel gameStartPanel = new() { Dock = DockStyle.Top, Height = 600 }, gameMainPanel = new() { Dock = DockStyle.Fill };
     readonly NumericUpDown numSalary = new() { Minimum = 0, Maximum = 10_000_000, Increment = 100, Width = 100, ThousandsSeparator = true };
     readonly NumericUpDown numLiving = new() { Minimum = 0, Maximum = 100_000, Increment = 10, Width = 80, ThousandsSeparator = true };
     readonly NumericUpDown numFamily = new() { Minimum = 1, Maximum = 11, Value = 1, Width = 50 };
@@ -149,7 +149,8 @@ public partial class MainForm
         cmbItemKind.SelectedIndex = 0;
 
         Control Row(params Control[] cs) { var r = Toolbar(cs); r.BackColor = Theme.CardBg; r.Padding = new Padding(0, 2, 0, 4); return r; }
-        Label Note(string t) { var l = Theme.Text_(t, Theme.Small, Theme.Muted); l.Dock = DockStyle.Top; l.Height = 22; return l; }
+        // 긴 설명은 두 줄까지 감싼다 (AutoSize를 끄고 높이를 줘야 줄바꿈된다)
+        Label Note(string t) => new() { Text = t, AutoSize = false, Dock = DockStyle.Top, Height = 40, Font = Theme.Small, ForeColor = Theme.Muted, BackColor = Color.Transparent, Padding = new Padding(0, 4, 8, 0) };
 
         void Sync()
         {
@@ -218,7 +219,7 @@ public partial class MainForm
         };
         btnSetupClose.Click += (_, _) => { gameStartPanel.Visible = false; };
 
-        var body = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+        var body = new Panel { Dock = DockStyle.Fill }; // 스크롤을 켜면 긴 설명이 줄바꿈되지 않고 옆으로 늘어난다
         var items = new Panel { Dock = DockStyle.Top, Height = 92, Padding = new Padding(0, 2, 0, 6) };
         items.Controls.Add(lstGameItems);
         var rows = new Control[]
@@ -336,7 +337,7 @@ public partial class MainForm
             if ((welcome || first) && news.Count > 0)
             {
                 var counts = news.GroupBy(n => n.Kind).Select(g => $"{g.Key} {g.Count()}건");
-                lblGameMsg.ForeColor = Color.FromArgb(250, 204, 21);
+                lblGameMsg.ForeColor = Theme.Gold;
                 lblGameMsg.Text = $"자리 비운 사이 소식: {string.Join(" · ", counts)}  — 오른쪽 소식에서 확인하세요";
             }
             RefreshGame();
@@ -377,7 +378,7 @@ public partial class MainForm
         kGameGain.Set((gain >= 0 ? "+" : "") + Krw(gain), gain > 0 ? Theme.Up : gain < 0 ? Theme.Down : null,
             $"{(st.Deposited > 0 ? gain / st.Deposited * 100 : 0):+0.0;-0.0;0.0}% · 넣은 돈 {Krw(st.Deposited)}");
         kGameCash.Set(Krw(st.Cash), null, st.Pending.Count > 0 ? $"예약 주문 {st.Pending.Count}건" : $"수수료 {Krw(st.FeesPaid)} · 세금 {Krw(st.TaxPaid)}");
-        kGameDiv.Set(Krw(st.DivReceived), Color.FromArgb(52, 211, 153), "배당락일 기준으로 들어와요");
+        kGameDiv.Set(Krw(st.DivReceived), Theme.Good, "배당락일 기준으로 들어와요");
         double added = st.Deposited - st.SeasonStartDeposited;
         double sret = st.SeasonStartValue > 0 ? (value - added - st.SeasonStartValue) / st.SeasonStartValue * 100 : 0;
         kGameSeason.Set($"{sret:+0.0;-0.0;0.0}%", sret > 0 ? Theme.Up : sret < 0 ? Theme.Down : null, $"{st.Season} · 지금 등급 {Game.Grade(sret)}");

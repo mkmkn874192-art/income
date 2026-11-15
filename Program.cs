@@ -40,6 +40,15 @@ internal static class Program
             MessageBox.Show($"문제가 생겼어요: {e.Exception.Message}\n\n자세한 내용은 {Path.Combine(Market.Dir, "error.log")}에 저장했어요. 앱은 계속 쓸 수 있어요.",
                             MainForm.AppName, MessageBoxButtons.OK, MessageBoxIcon.Warning);
         };
+        // 화면 점검: 창을 화면 밖에 띄워 모든 화면을 그림 파일로 저장하고 닫는다 (마우스·화면을 건드리지 않음)
+        if (args.Length > 1 && args[0] == "--shot")
+        {
+            var f = new MainForm { ShowInTaskbar = false };
+            f.PrepareShot();
+            f.Shown += async (_, _) => { await f.ShotAll(args[1]); f.Close(); };
+            Application.Run(f);
+            return 0;
+        }
         Application.Run(new MainForm());
         return 0;
     }

@@ -110,6 +110,8 @@ public static class Yahoo
             DivYield = yield > 0 ? yield : null,
             Dps = yield > 0 ? price * yield / 100 : null,
             Sector = sector, Chg1y = tr.Chg1y, Vs50 = tr.Vs50, Vs200 = tr.Vs200, FromHigh = tr.FromHigh,
+            Per = !etf && D(q, "trailingPE") > 0 ? D(q, "trailingPE") : null,
+            Pbr = !etf && D(q, "priceToBook") > 0 ? D(q, "priceToBook") : null,
         };
     }
 
