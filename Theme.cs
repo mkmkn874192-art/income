@@ -626,3 +626,18 @@ class WeightChart : Control
 
     protected override void OnResize(EventArgs e) { base.OnResize(e); Invalidate(); }
 }
+
+// 오른쪽 클릭 메뉴 등을 어두운 색으로
+class DarkMenuColors : ProfessionalColorTable
+{
+    public override Color ToolStripDropDownBackground => Theme.CardBg;
+    public override Color MenuBorder => Theme.Border;
+    public override Color MenuItemBorder => Theme.AccentSoft;
+    public override Color MenuItemSelected => Theme.AccentSoft;
+    public override Color MenuItemSelectedGradientBegin => Theme.AccentSoft;
+    public override Color MenuItemSelectedGradientEnd => Theme.AccentSoft;
+    public override Color SeparatorDark => Theme.Border;
+    public override Color ImageMarginGradientBegin => Theme.CardBg;
+    public override Color ImageMarginGradientMiddle => Theme.CardBg;
+    public override Color ImageMarginGradientEnd => Theme.CardBg;
+}

@@ -197,8 +197,14 @@ public class MainForm : Form
         var logo = new Panel { Dock = DockStyle.Top, Height = 92, Padding = new Padding(24, 22, 0, 0) };
         logo.Controls.Add(new Label { Text = AppEn, Dock = DockStyle.Top, Height = 22, Font = Theme.Small, ForeColor = Theme.Muted });
         logo.Controls.Add(new Label { Text = AppName, Dock = DockStyle.Top, Height = 34, Font = Theme.Logo, ForeColor = Color.White });
+        // 어느 화면에서든 종목 찾기 → 시장에서 보기 / 배당 수입 / 대가 따라하기 / 시뮬레이터에 추가
+        var find = new Panel { Dock = DockStyle.Top, Height = 50, Padding = new Padding(14, 0, 14, 14) };
+        var picker = new StockPicker(() => allRows, "종목 찾기 · 추가") { Dock = DockStyle.Fill };
+        picker.Picked += r => OnGlobalPick(r, picker);
+        find.Controls.Add(picker);
         side.Controls.Add(navPanel);
         side.Controls.Add(modeBadge);
+        side.Controls.Add(find);
         side.Controls.Add(logo);
         return side;
     }
@@ -743,7 +749,9 @@ public class MainForm : Form
         lblIncome.Dock = DockStyle.Fill;
         status.Controls.Add(lblIncome);
         page.Controls.Add(status);
-        page.Controls.Add(Toolbar(btnImport, btnRemove, Theme.Text_("     "), pillPre, pillPost));
+        var incomePicker = new StockPicker(() => allRows, "종목 찾아서 담기 (10주)") { Width = (int)(280 * DeviceDpi / 96f) };
+        incomePicker.Picked += async r => lblIncome.Text = await AddToIncome(r, 10);
+        page.Controls.Add(Toolbar(incomePicker, btnImport, btnRemove, Theme.Text_("     "), pillPre, pillPost));
         page.Controls.Add(Header("배당 수입", "담아 둔 종목이 지난 결산만큼 배당을 준다고 보고, 하루·한 주·한 달·1년에 들어올 돈을 계산해요."));
         return page;
     }
@@ -864,29 +872,46 @@ public class MainForm : Form
     {
         if (gridMarket.CurrentRow?.Cells["종목코드"].Value is not string code || !rowByCode.TryGetValue(code, out var r)) return;
         btnAdd.Enabled = false;
+        try { lblMarket.Text = await AddToIncome(r, (double)numAddQty.Value); }
+        finally { btnAdd.Enabled = true; }
+    }
+
+    // 배당 수입 목록에 qty주 더하기. 결과 문장을 돌려준다.
+    async Task<string> AddToIncome(StockRow r, double qty)
+    {
         try
         {
-            var item = incomeItems.FirstOrDefault(i => i.Code == code);
+            var item = incomeItems.FirstOrDefault(i => i.Code == r.Q.Code);
             if (item == null)
             {
-                var (dps, src) = await FindDps(code);
-                item = new IncomeItem { Code = code, Name = r.Q.Name, Dps = dps, Source = src, Currency = r.Q.Currency };
+                var (dps, src) = await FindDps(r.Q.Code);
+                item = new IncomeItem { Code = r.Q.Code, Name = r.Q.Name, Dps = dps, Source = src, Currency = r.Q.Currency };
                 incomeItems.Add(item);
             }
-            item.Qty += (double)numAddQty.Value;
+            item.Qty += qty;
             item.Price = r.Q.Price;
             Income.Save(incomeItems);
             RefreshIncome();
-            lblMarket.Text = $"'{r.Q.Name}' {numAddQty.Value:N0}주를 배당 수입에 담았어요. (지금 {item.Qty:N0}주)";
+            return $"'{r.Q.Name}' {qty:N0}주를 배당 수입에 담았어요. (지금 {item.Qty:N0}주) 수량은 표에서 고칠 수 있어요.";
         }
         catch (Exception ex)
         {
-            MessageBox.Show("배당 정보를 못 가져왔어요: " + ex.Message, "오류");
+            return "배당 정보를 못 가져왔어요: " + ex.Message.Split('\n')[0];
         }
-        finally
-        {
-            btnAdd.Enabled = true;
-        }
+    }
+
+    // 어느 화면에서든 쓰는 사이드바 검색: 고르면 무엇을 할지 고르는 메뉴를 띄운다
+    void OnGlobalPick(StockRow r, Control anchor)
+    {
+        var menu = new ContextMenuStrip { ShowImageMargin = false, Font = Theme.Body, Renderer = new ToolStripProfessionalRenderer(new DarkMenuColors()) };
+        menu.Items.Add(new ToolStripLabel($"{r.Q.Name} ({r.Q.Code})") { ForeColor = Theme.Muted });
+        void Item(string text, Func<Task> act) => menu.Items.Add(text, null, async (_, _) => await act()).ForeColor = Theme.Text;
+        Item("시장에서 자세히 보기", () => { txtSearch.Text = r.Q.Code; ShowPage(PMarket); return Task.CompletedTask; });
+        Item("배당 수입에 담기 (10주)", async () => { ShowPage(PIncome); lblIncome.Text = await AddToIncome(r, 10); });
+        Item("대가 따라하기 구성에 추가", async () => { ShowPage(PMasters); await AddMsHolding(r); });
+        Item("시뮬레이터 구성에 추가", () => { AddSimAsset(r); ShowPage(PSim); return Task.CompletedTask; });
+        menu.Closed += (_, _) => BeginInvoke(menu.Dispose);
+        menu.Show(anchor, new Point(0, anchor.Height + 2));
     }
 
     async Task ImportHoldings()
@@ -941,9 +966,12 @@ public class MainForm : Form
     readonly DataGridView gridMsCompare = NewGrid(true);
     readonly TermText txtMs = new() { Dock = DockStyle.Fill };
     readonly Label lblMs = Theme.Text_("질문에 답하고 [내게 맞는 방식 골라 주기]를 누르거나, 아래 목록에서 직접 고르세요.", Theme.Small, Theme.Muted);
+    readonly Button btnMsRemove = Theme.Secondary("선택 빼기");
     int qHorizon, qDrop, qGoal;
     string msReason; // 자동 추천으로 골랐을 때의 이유
+    Masters.Style msStyle;
     List<Masters.Holding> msHold = new();
+    List<string> msNotes = new();
 
     Control BuildMastersPage()
     {
@@ -956,9 +984,12 @@ public class MainForm : Form
         gridMsCompare.CellFormatting += (_, e) =>
         {
             string n = gridMsCompare.Columns[e.ColumnIndex].Name;
-            if (e.Value is double v && n is "연평균%" or "최대낙폭%" or "최악1년%" or "그때 산 지금%")
+            if (e.Value is double v && n is "연평균%" or "최대낙폭%" or "최악1년%" or "그때 샀다면%")
                 e.CellStyle.ForeColor = e.CellStyle.SelectionForeColor = v >= 0 ? Theme.Up : Theme.Down;
         };
+        // 비교표는 가로로 넘치지 않게 열을 카드 너비에 나눠 담고, 머리글은 두 줄까지
+        gridMsCompare.ColumnHeadersDefaultCellStyle.WrapMode = DataGridViewTriState.True;
+        gridMsCompare.ColumnHeadersHeight = (int)(44 * DeviceDpi / 96f);
         foreach (Control c in new Control[] { numMsAge, numMsStart, numMsMonthly }) Theme.StyleInput(c);
         txtMs.OpenFull = e => OpenLearn(e.Key);
 
@@ -985,25 +1016,29 @@ public class MainForm : Form
             if (ReferenceEquals(lstStyles.SelectedItem, s)) await RunMasters(s); else lstStyles.SelectedItem = s;
         };
         btnMsCompare.Click += async (_, _) => await CompareMasters();
-        btnMsToSim.Click += (_, _) =>
-        {
-            if (msHold.Count == 0) return;
-            SetSimAssets(msHold.Select(h => (h.Code, h.Name, h.Weight * 100)).ToList());
-            numSimStart.Value = numMsStart.Value;
-            numSimMonthly.Value = numMsMonthly.Value;
-            ShowPage(PSim);
-        };
+        btnMsToSim.Click += async (_, _) => { ShowPage(PSim); await RunSim(); };
         btnMsToSim.Enabled = false;
+        btnMsRemove.Click += async (_, _) =>
+        {
+            var codes = gridMsHold.SelectedRows.Cast<DataGridViewRow>().Select(r => r.Cells["코드"].Value as string).ToHashSet();
+            if (codes.Count == 0 || msHold.Count <= codes.Count) return;
+            await ShowMasters(Reweight(msHold.Where(h => !codes.Contains(h.Code)).ToList()), "직접 뺀 종목이 있어요. 남은 종목의 비중을 같은 비율로 늘렸어요.");
+        };
+        // 시작 금액·매달 금액은 시뮬레이터와 같은 값을 쓴다
+        numMsStart.ValueChanged += (_, _) => numSimStart.Value = numMsStart.Value;
+        numMsMonthly.ValueChanged += (_, _) => numSimMonthly.Value = numMsMonthly.Value;
+        numSimStart.ValueChanged += (_, _) => numMsStart.Value = numSimStart.Value;
+        numSimMonthly.ValueChanged += (_, _) => numMsMonthly.Value = numSimMonthly.Value;
 
-        // 고르기 어려운 사람을 위한 질문 3개 (+ 나이)
+        // 고르기 어려운 사람을 위한 질문 3개 (+ 나이). 칸이 좁으면 답이 다음 줄로 넘어간다.
         FlowLayoutPanel Choice(string[] opts, int def, Action<int> set)
         {
-            var f = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 2, 0, 10) };
+            var f = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, WrapContents = true, Padding = new Padding(0, 2, 0, 8) };
             var ps = new List<Pill>();
             for (int i = 0; i < opts.Length; i++)
             {
                 int k = i;
-                var p = new Pill(opts[i], Theme.Text, clickable: true) { Selected = i == def, Margin = new Padding(0, 0, 6, 0) };
+                var p = new Pill(opts[i], Theme.Text, clickable: true) { Selected = i == def, Margin = new Padding(0, 0, 6, 6) };
                 p.Click += (_, _) => { set(k); foreach (var x in ps) { x.Selected = x == p; x.Invalidate(); } };
                 ps.Add(p);
                 f.Controls.Add(p);
@@ -1011,20 +1046,25 @@ public class MainForm : Form
             set(def);
             return f;
         }
-        var q = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
-        q.Controls.Add(Theme.Text_("이 돈은 언제 쓸 수도 있나요?", Theme.Bold));
-        q.Controls.Add(Choice(new[] { "3년 안", "3~10년 뒤", "10년 넘게 둘 돈" }, 1, i => qHorizon = i));
-        q.Controls.Add(Theme.Text_("1년 만에 20% 떨어지면?", Theme.Bold));
-        q.Controls.Add(Choice(new[] { "팔고 싶다", "불안해도 버틴다", "더 산다" }, 1, i => qDrop = i));
-        q.Controls.Add(Theme.Text_("가장 원하는 것은?", Theme.Bold));
-        q.Controls.Add(Choice(new[] { "매달 배당", "둘 다", "자산 키우기" }, 1, i => qGoal = i));
-        var ageRow = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 0, 0, 10) };
+        // Dock=Top은 나중에 넣은 것이 위로 가므로 아래쪽부터 넣는다. 그래도 넘치면 세로로만 스크롤.
+        var q = new Panel { Dock = DockStyle.Fill, AutoScroll = true };
+        Theme.DarkScrollbars(q);
+        Label Ask(string t) => new() { Text = t, Dock = DockStyle.Top, Height = 26, Font = Theme.Bold, ForeColor = Theme.Text };
+        var ageRow = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true, Padding = new Padding(0, 0, 0, 8) };
         ageRow.Controls.AddRange(new Control[] { Theme.Text_("나이", Theme.Bold), numMsAge, Theme.Text_("세") });
+        var autoRow = new FlowLayoutPanel { Dock = DockStyle.Top, AutoSize = true };
+        autoRow.Controls.Add(btnMsAuto);
+        q.Controls.Add(autoRow);
         q.Controls.Add(ageRow);
-        q.Controls.Add(btnMsAuto);
+        q.Controls.Add(Choice(new[] { "배당", "둘 다", "자산 키우기" }, 1, i => qGoal = i));
+        q.Controls.Add(Ask("가장 원하는 것은?"));
+        q.Controls.Add(Choice(new[] { "팔겠다", "버틴다", "더 산다" }, 1, i => qDrop = i));
+        q.Controls.Add(Ask("1년 만에 20% 떨어지면?"));
+        q.Controls.Add(Choice(new[] { "3년 안", "3~10년", "10년 넘게" }, 1, i => qHorizon = i));
+        q.Controls.Add(Ask("이 돈은 언제 쓸 수도 있나요?"));
 
         var left = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, Margin = Padding.Empty };
-        left.RowStyles.Add(new RowStyle(SizeType.Absolute, 360));
+        left.RowStyles.Add(new RowStyle(SizeType.Absolute, 400));
         left.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         left.Controls.Add(new Card("처음이라면 · 질문 3개로 자동 추천", q), 0, 0);
         left.Controls.Add(new Card("직접 고르기", lstStyles), 0, 1);
@@ -1041,10 +1081,19 @@ public class MainForm : Form
 
         var right = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 3, Margin = Padding.Empty };
         right.RowStyles.Add(new RowStyle(SizeType.Absolute, 112));
-        right.RowStyles.Add(new RowStyle(SizeType.Percent, 34));
-        right.RowStyles.Add(new RowStyle(SizeType.Percent, 66));
+        right.RowStyles.Add(new RowStyle(SizeType.Percent, 40));
+        right.RowStyles.Add(new RowStyle(SizeType.Percent, 60));
         right.Controls.Add(kpis, 0, 0);
-        right.Controls.Add(new Card("자동으로 짠 구성 · 시작 금액 기준 수량", gridMsHold), 0, 1);
+        // 구성 카드: 위에 종목 검색(추가)·선택 빼기, 아래 표
+        var msPicker = new StockPicker(() => allRows, "종목 이름·코드로 찾아서 구성에 추가");
+        msPicker.Width = (int)(340 * DeviceDpi / 96f);
+        msPicker.Picked += async r => await AddMsHolding(r);
+        var holdBody = new Panel { Dock = DockStyle.Fill };
+        gridMsHold.Dock = DockStyle.Fill;
+        holdBody.Controls.Add(gridMsHold);
+        holdBody.Controls.Add(Theme.Spacer(6));
+        holdBody.Controls.Add(Toolbar(msPicker, btnMsRemove));
+        right.Controls.Add(new Card("구성 · 시작 금액 기준 수량 (시뮬레이터와 연결)", holdBody), 0, 1);
         right.Controls.Add(bottom, 0, 2);
 
         var body = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Margin = Padding.Empty };
@@ -1101,12 +1150,39 @@ public class MainForm : Form
         string reason = msReason;
         msReason = null;
         if (style.Picks && allRows.Count == 0) { lblMs.Text = "시세가 아직 없어요. 잠시 후 다시 골라주세요."; return; }
+        msStyle = style;
+        var (list, notes) = Masters.Build(style, allRows, MaybeSpecial, Plan.Satellites(allRows, screenTable, MaybeSpecial, 4), (int)numMsAge.Value);
+        msNotes = notes;
+        await ShowMasters(list, null, reason);
+    }
+
+    // 비중 합이 1이 되게 다시 맞춘다
+    static List<Masters.Holding> Reweight(List<Masters.Holding> list)
+    {
+        double sum = list.Sum(h => h.Weight);
+        return sum <= 0 ? list : list.Select(h => h with { Weight = h.Weight / sum }).ToList();
+    }
+
+    // 검색으로 고른 종목을 구성에 10% 넣고, 나머지는 같은 비율로 줄인다
+    async Task AddMsHolding(StockRow r)
+    {
+        if (msHold.Any(h => h.Code == r.Q.Code)) { lblMs.Text = $"'{r.Q.Name}'은 이미 구성에 있어요."; return; }
+        msStyle ??= Masters.All[0];
+        var list = msHold.Count == 0
+            ? new List<Masters.Holding> { new(r.Q.Code, r.Q.Name, 1, null, false, "직접 추가") }
+            : msHold.Select(h => h with { Weight = h.Weight * 0.9 }).Append(new(r.Q.Code, r.Q.Name, 0.1, null, false, "직접 추가")).ToList();
+        await ShowMasters(Reweight(list), $"'{r.Q.Name}'을 10% 넣고 나머지 비중을 같은 비율로 줄였어요.");
+    }
+
+    // 구성 → 표·금액·위험을 계산해 보여주고, 시뮬레이터 구성도 같이 바꾼다
+    async Task ShowMasters(List<Masters.Holding> list, string changed, string reason = null)
+    {
+        var style = msStyle;
+        var notes = changed == null ? msNotes : msNotes.Append(changed).Append("구성을 직접 고쳐서 위 설명의 원래 방식과 다를 수 있어요.").ToList();
         lstStyles.Enabled = btnMsAuto.Enabled = false;
         lblMs.Text = $"{style.Who} 방식으로 구성하고 과거 가격을 받는 중...";
         try
         {
-            int age = (int)numMsAge.Value;
-            var (list, notes) = Masters.Build(style, allRows, MaybeSpecial, Plan.Satellites(allRows, screenTable, MaybeSpecial, 4), age);
             var assets = ToAssets(list);
             await LoadMonthly(assets);
             msHold = list;
@@ -1135,15 +1211,23 @@ public class MainForm : Form
             var main = Backtest.Run(assets, simCache, 120, start, monthly, true, true);
             var risk = Backtest.EntryRisk(assets, simCache, 120, true);
 
-            kMsStart.Set(double.IsNaN(minStart) ? "—" : Krw(minStart), null, "모든 종목을 비중대로 1주 이상");
-            kMsMonthly.Set(double.IsNaN(minMonthly) ? "1천만원 넘음" : Krw(minMonthly), null, "1주씩 사도 비중이 유지되는 금액");
-            kMsDiv.Set(Krw(monthDiv), Color.FromArgb(52, 211, 153), $"연 배당률 {divYield * 100:0.00}% (최근 1년 실제 분배)");
+            kMsStart.Set(double.IsNaN(minStart) ? "—" : Krw(minStart), null, "모든 종목 1주 이상");
+            kMsMonthly.Set(double.IsNaN(minMonthly) ? "1천만원 넘음" : Krw(minMonthly), null, "1주씩 사도 비중 유지");
+            kMsDiv.Set(Krw(monthDiv), Color.FromArgb(52, 211, 153), $"연 {divYield * 100:0.00}% · 최근 1년");
             kMsCagr.Set($"{main.Cagr:+0.0;-0.0}%", main.Cagr >= 0 ? Theme.Up : Theme.Down, $"최대 낙폭 {main.Mdd:0.0}%");
-            kMsWorst.Set($"{risk.WorstNow:+0.0;-0.0}%", risk.WorstNow >= 0 ? Theme.Up : Theme.Down, $"{risk.WorstMonth:yyyy.MM}에 한 번에 샀다면 지금");
+            kMsWorst.Set($"{risk.WorstNow:+0.0;-0.0}%", risk.WorstNow >= 0 ? Theme.Up : Theme.Down, $"{risk.WorstMonth:yyyy.MM} 매수 → 지금");
 
             txtMs.SetText(MastersText(style, reason, list, assets, notes, start, monthly, minStart, minMonthly, slow, divYield, monthDiv, main));
             btnMsToSim.Enabled = true;
             lblMs.Text = $"{DateTime.Now:HH:mm} 기준 · 공개된 원칙을 앱이 단순하게 옮긴 구성이에요. 대가가 실제로 이렇게 투자했다는 뜻이 아니고, 투자 권유가 아니에요.";
+
+            // 시뮬레이터도 같은 구성으로. 시뮬레이터 화면을 보고 있으면 바로 다시 계산한다.
+            SetSimAssets(list.Select(h => (h.Code, h.Name, h.Weight * 100)).ToList());
+            syncingStyle = true;
+            cmbSimStyle.SelectedItem = style;
+            syncingStyle = false;
+            lblSim.Text = $"[대가 따라하기] {style.Who} 구성이에요. 종목을 더하거나 비중을 고친 뒤 [시뮬레이션 실행]을 누르세요.";
+            if (pages[PSim].page.Visible) await RunSim();
         }
         catch (Exception ex)
         {
@@ -1258,7 +1342,7 @@ public class MainForm : Form
             t.Columns.Add("방식");
             foreach (var c in new[] { "연평균%", "최대낙폭%", "최악1년%" }) t.Columns.Add(c, typeof(double));
             t.Columns.Add("최악 시점");
-            t.Columns.Add("그때 산 지금%", typeof(double));
+            t.Columns.Add("그때 샀다면%", typeof(double));
             t.Columns.Add("손해 비율%", typeof(double));
             t.Columns.Add("회복(개월)", typeof(int));
             foreach (var (name, assets, rebal) in rows)
@@ -1268,7 +1352,11 @@ public class MainForm : Form
                 t.Rows.Add(name, r.Cagr, r.Mdd, double.IsNaN(r.WorstYear) ? DBNull.Value : r.WorstYear, k.WorstMonth.ToString("yyyy.MM"), k.WorstNow, k.LossShare, k.LongestUnderwater);
             }
             gridMsCompare.DataSource = t;
-            FitColumns(gridMsCompare, t, "방식");
+            foreach (DataGridViewColumn c in gridMsCompare.Columns)
+            {
+                c.SortMode = DataGridViewColumnSortMode.Automatic;
+                c.FillWeight = c.Name == "방식" ? 230 : 100;
+            }
             lblMs.Text = "* 종목을 고르는 방식은 지금 고른 종목으로 과거를 계산해 실제보다 좋게 나오기 쉬워요 · 배당 재투자, 세후 · 과거 결과가 미래를 보장하지 않아요.";
         }
         catch (Exception ex)
@@ -1297,6 +1385,9 @@ public class MainForm : Form
     readonly Label lblSim = Theme.Text_("과거 월말 종가와 실제 배당 기록(Yahoo)으로 계산해요. 과거 결과가 미래를 보장하지 않아요.", Theme.Small, Theme.Muted);
     readonly Dictionary<string, SortedDictionary<DateTime, (double close, double div)>> simCache = new();
     int simMonths = 120;
+    // 대가 따라하기와 같은 방식 선택. 고르면 대가 따라하기 쪽이 구성을 짜서 여기로 넘겨준다.
+    readonly ComboBox cmbSimStyle = new() { DropDownStyle = ComboBoxStyle.DropDownList, FlatStyle = FlatStyle.Flat, Width = 230, Margin = new Padding(0, 4, 8, 0) };
+    bool syncingStyle;
 
     Control BuildSimPage()
     {
@@ -1324,6 +1415,22 @@ public class MainForm : Form
             SetSimAssets(incomeItems.Select(i => (i.Code, i.Name, i.Qty * i.Price * Market.Fx(i.Currency) / total * 100)).ToList());
         };
         btnSimRun.Click += async (_, _) => await RunSim();
+        Theme.StyleInput(cmbSimStyle);
+        cmbSimStyle.Format += (_, e) => { if (e.ListItem is Masters.Style st) e.Value = $"{st.Who} · {st.Name}"; };
+        foreach (var st in Masters.All) cmbSimStyle.Items.Add(st);
+        cmbSimStyle.SelectedIndexChanged += (_, _) =>
+        {
+            if (syncingStyle || cmbSimStyle.SelectedItem is not Masters.Style st) return;
+            if (ReferenceEquals(lstStyles.SelectedItem, st)) _ = RunMasters(st); else lstStyles.SelectedItem = st;
+        };
+        var simPicker = new StockPicker(() => allRows, "종목 이름·코드로 찾아서 추가") { Width = (int)(300 * DeviceDpi / 96f) };
+        simPicker.Picked += AddSimAsset;
+        var btnSimRemove = Theme.Secondary("선택 빼기");
+        btnSimRemove.Click += (_, _) =>
+        {
+            foreach (DataGridViewRow r in gridSimAssets.SelectedRows.Cast<DataGridViewRow>().ToList())
+                if (!r.IsNewRow) gridSimAssets.Rows.Remove(r);
+        };
 
         var periodBar = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(16, 0, 0, 0) };
         var pills = new List<Pill>();
@@ -1342,7 +1449,7 @@ public class MainForm : Form
 
         var row1 = Toolbar(Theme.Text_("시작 금액"), numSimStart, Theme.Text_("만원    매달"), numSimMonthly, Theme.Text_("만원    기간"), periodBar,
             chkSimRebal, chkSimReinvest);
-        var row2 = Toolbar(btnFromPlan, btnFromIncome, btnSimRun);
+        var row2 = Toolbar(Theme.Text_("대가 방식"), cmbSimStyle, btnFromPlan, btnFromIncome, btnSimRun);
 
         var kpis = new TableLayoutPanel { Dock = DockStyle.Top, Height = 112, ColumnCount = 5, Margin = Padding.Empty };
         for (int i = 0; i < 5; i++) kpis.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 20));
@@ -1372,7 +1479,15 @@ public class MainForm : Form
         var body = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Margin = Padding.Empty };
         body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 24));
         body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 76));
-        body.Controls.Add(new Card("구성 · 종목코드와 비중(%) 직접 수정 가능", gridSimAssets), 0, 0);
+        var assetBody = new Panel { Dock = DockStyle.Fill };
+        gridSimAssets.Dock = DockStyle.Fill;
+        simPicker.Dock = DockStyle.Top;
+        assetBody.Controls.Add(gridSimAssets);
+        assetBody.Controls.Add(Theme.Spacer(6));
+        assetBody.Controls.Add(Toolbar(btnSimRemove, Theme.Text_("비중(%) 칸은 직접 고칠 수 있어요", Theme.Small, Theme.Muted)));
+        assetBody.Controls.Add(Theme.Spacer(6));
+        assetBody.Controls.Add(simPicker);
+        body.Controls.Add(new Card("구성", assetBody), 0, 0);
         body.Controls.Add(right, 1, 0);
 
         var status = new Panel { Dock = DockStyle.Top, Height = 26 };
@@ -1392,6 +1507,19 @@ public class MainForm : Form
     // 기본 구성: 투자 계획의 ETF 기본 추천 (개별주는 빼고 비중 다시 맞춤)
     List<(string code, string name, double weight)> DefaultSimAssets() =>
         Enumerable.Range(0, 3).Select(i => (Plan.Etfs[Portfolio.Cats[i]][0].Code, Plan.Etfs[Portfolio.Cats[i]][0].Name, Portfolio.Target[i] * 100)).ToList();
+
+    // 검색으로 고른 종목을 10% 넣고 나머지는 같은 비율로 줄인다 (합 100%)
+    void AddSimAsset(StockRow r)
+    {
+        gridSimAssets.EndEdit();
+        var cur = ((DataTable)gridSimAssets.DataSource).Rows.Cast<DataRow>().Where(x => x.RowState != DataRowState.Deleted && x["종목코드"] is string c && c.Trim() != "")
+            .Select(x => (code: (string)x["종목코드"], name: x["종목명"] as string ?? "", weight: x["비중%"] is double d ? d : 0)).ToList();
+        if (cur.Any(x => x.code == r.Q.Code)) { lblSim.Text = $"'{r.Q.Name}'은 이미 구성에 있어요."; return; }
+        double sum = cur.Sum(x => x.weight);
+        var list = cur.Select(x => (x.code, x.name, sum > 0 ? x.weight / sum * 90 : 0)).Append((r.Q.Code, r.Q.Name, cur.Count == 0 ? 100.0 : 10.0)).ToList();
+        SetSimAssets(list);
+        lblSim.Text = $"'{r.Q.Name}'을 10% 넣고 나머지 비중을 같은 비율로 줄였어요. [시뮬레이션 실행]을 누르세요.";
+    }
 
     void SetSimAssets(List<(string code, string name, double weight)> items)
     {
