@@ -6,7 +6,7 @@ namespace KrxScreen;
 public class MainForm : Form
 {
     static readonly string KeyFile = Path.Combine(Market.Dir, "keys.txt");
-    const int PIncome = 0, PMarket = 1, PScreen = 2, PPortfolio = 3, PSettings = 4;
+    const int PIncome = 0, PPlan = 1, PMarket = 2, PScreen = 3, PPortfolio = 4, PSettings = 5;
 
     // 제품명은 여기서만 바꾸면 된다
     public const string AppName = "인컴곳간";
@@ -137,6 +137,7 @@ public class MainForm : Form
         Controls.Add(content);
         Controls.Add(BuildSidebar());
         AddPage("", "배당 수입", BuildIncomePage());
+        AddPage("", "투자 계획", BuildPlanPage());
         AddPage("", "시장", BuildMarketPage());
         AddPage("", "가치 분석", BuildScreenPage());
         AddPage("", "포트폴리오", BuildPortfolioPage());
@@ -287,7 +288,7 @@ public class MainForm : Form
 
     Control BuildDetailPanel()
     {
-        string[] names = { "시총", "거래대금", "PER", "PBR", "ROE", "배당수익률", "부채비율", "이익성장", "점수", "배당 연수" };
+        string[] names = { "PER(3년)", "PER(1년)", "PBR", "ROE", "배당수익률", "부채비율", "이익성장", "점수", "배당 연수", "시총", "거래대금", "" };
         for (int i = 0; i < 4; i++) dMetrics.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
         foreach (var n in names)
         {
@@ -406,7 +407,7 @@ public class MainForm : Form
         page.Controls.Add(Theme.Spacer(14));
         page.Controls.Add(Toolbar(Theme.Text_("주가 하한(원)"), numPrice, Theme.Text_("   시총 하한(조)"), numCap, Theme.Text_("   "),
             btnRun, btnCsv, progress, lblStatus));
-        page.Controls.Add(Header("가치 분석", "10년 재무와 배당 이력을 그레이엄의 6가지 기준으로 채점해요. 결과는 저장되어 시장 검색과 배당 계산에 쓰여요."));
+        page.Controls.Add(Header("가치 분석", "10년 재무와 배당 이력을 『현명한 투자자』의 7가지 기준으로 채점해요. PER은 책대로 최근 3년 평균 이익으로 계산해요(15배 이하 통과)."));
         return page;
     }
 
@@ -858,6 +859,214 @@ public class MainForm : Form
         }
     }
 
+    // ================= 투자 계획 =================
+
+    readonly NumericUpDown numStart = new() { Minimum = 0, Maximum = 10_000_000, Value = 1000, Width = 90, ThousandsSeparator = true };
+    readonly NumericUpDown numMonthly = new() { Minimum = 0, Maximum = 100_000, Value = 100, Width = 80, ThousandsSeparator = true };
+    readonly NumericUpDown numYears = new() { Minimum = 1, Maximum = 40, Value = 10, Width = 55 };
+    readonly NumericUpDown numBondYield = new() { Minimum = 0, Maximum = 15, DecimalPlaces = 1, Increment = 0.5m, Value = 3.0m, Width = 60 };
+    readonly NumericUpDown numGrowth = new() { Minimum = -10, Maximum = 20, DecimalPlaces = 1, Increment = 0.5m, Value = 4.0m, Width = 60 };
+    readonly CheckBox chkReinvest = new() { Text = "배당 재투자", AutoSize = true, Checked = true, Margin = new Padding(12, 8, 0, 0) };
+    readonly Button btnMakePlan = Theme.Primary("조합표 만들기");
+    readonly Button btnApplyPlan = Theme.Secondary("이 조합으로 포트폴리오 설정");
+    readonly DataGridView gridCombo = NewGrid(true);
+    readonly DataGridView gridYears = NewGrid(true);
+    readonly TextBox txtStrategy = new() { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, BorderStyle = BorderStyle.None, BackColor = Theme.CardBg, ForeColor = Theme.Text, Font = Theme.Body };
+    readonly Label lblPlan = Theme.Text_("목표 비중은 [설정]에서 바꿀 수 있어요. 조합표는 가치 분석 결과와 오늘 시세로 만들어요.", Theme.Small, Theme.Muted);
+    List<Plan.Pick> picks = new();
+
+    Control BuildPlanPage()
+    {
+        var page = Page();
+        foreach (var g in new[] { gridCombo, gridYears }) { Theme.StyleGrid(g); g.DataBindingComplete += (s, _) => FormatNumbers((DataGridView)s); }
+        foreach (Control c in new Control[] { numStart, numMonthly, numYears, numBondYield, numGrowth, chkReinvest }) Theme.StyleInput(c);
+        Theme.DarkScrollbars(txtStrategy);
+        btnMakePlan.Click += async (_, _) => await MakePlan();
+        btnApplyPlan.Click += (_, _) => ApplyPlan();
+        btnApplyPlan.Enabled = false;
+
+        var row1 = Toolbar(Theme.Text_("지금 투자금"), numStart, Theme.Text_("만원    매달"), numMonthly, Theme.Text_("만원    기간"), numYears,
+            Theme.Text_("년"), chkReinvest);
+        var row2 = Toolbar(Theme.Text_("가정:  채권 이자 연", Theme.Body, Theme.Muted), numBondYield, Theme.Text_("%    주식 가격 상승 연", Theme.Body, Theme.Muted),
+            numGrowth, Theme.Text_("%      ", Theme.Body, Theme.Muted), btnMakePlan, btnApplyPlan);
+
+        var left = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, Margin = Padding.Empty };
+        left.RowStyles.Add(new RowStyle(SizeType.Percent, 52));
+        left.RowStyles.Add(new RowStyle(SizeType.Percent, 48));
+        left.Controls.Add(new Card("추천 조합표", gridCombo), 0, 0);
+        left.Controls.Add(new Card("연도별 예상 (세후 배당)", gridYears), 0, 1);
+
+        var body = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Margin = Padding.Empty };
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 60));
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40));
+        body.Controls.Add(left, 0, 0);
+        body.Controls.Add(new Card("단계별 전략", txtStrategy), 1, 0);
+
+        var status = new Panel { Dock = DockStyle.Top, Height = 26 };
+        lblPlan.Dock = DockStyle.Fill;
+        status.Controls.Add(lblPlan);
+
+        page.Controls.Add(body);
+        page.Controls.Add(status);
+        page.Controls.Add(Theme.Spacer(6));
+        page.Controls.Add(row2);
+        page.Controls.Add(Theme.Spacer(6));
+        page.Controls.Add(row1);
+        page.Controls.Add(Header("투자 계획", "목표 비중에 맞춘 추천 조합과, 매달 쌓아 갈 때 몇 년 뒤 얼마의 배당이 들어오는지 보여줘요."));
+        return page;
+    }
+
+    async Task MakePlan()
+    {
+        if (allRows.Count == 0) { lblPlan.Text = "시세가 아직 없어요. 잠시 후 다시 눌러주세요."; return; }
+        btnMakePlan.Enabled = false;
+        lblPlan.Text = "ETF 시세와 배당률을 받는 중...";
+        try
+        {
+            var etfSymbols = Plan.Etfs.Values.SelectMany(a => a).Select(e => e.Code + ".KS");
+            var q = await Yahoo.Quotes(etfSymbols.Concat(new[] { "VOO", "SCHD" }));
+            double? ProxyYield(string p) => p != null && q.TryGetValue(p, out var v) ? v.yield : null;
+
+            picks = new List<Plan.Pick>();
+            for (int i = 0; i < 3; i++)
+            {
+                string cat = Portfolio.Cats[i];
+                var cands = Plan.Etfs[cat];
+                var e = cands.FirstOrDefault(c => q.TryGetValue(c.Code + ".KS", out var v) && v.price > 0) ?? cands[0];
+                double price = q.TryGetValue(e.Code + ".KS", out var pv) ? pv.price : 0;
+                double? y = cat == "채권" ? (double)numBondYield.Value : ProxyYield(e.Proxy);
+                string alt = string.Join(", ", cands.Where(c => c != e).Select(c => $"{c.Name}({c.Code})"));
+                string why = e.Why + (e.Proxy != null ? $" · 배당률은 {e.Proxy} 기준" : " · 이자율은 가정값");
+                picks.Add(new Plan.Pick(cat, e.Code, e.Name, Portfolio.Target[i], price, y, why, alt));
+            }
+
+            // 위성: 종목당 (위성 비중 ÷ 종목 수), 단 한 종목 한도를 넘지 않게
+            var sats = Plan.Satellites(allRows, screenTable, MaybeSpecial, 4);
+            double satW = sats.Count == 0 ? 0 : Math.Min(Portfolio.Target[3] / sats.Count, Portfolio.SatelliteMax);
+            foreach (var s in sats)
+            {
+                double? dps = LatestDps(s.Q.Code);
+                double? y = dps > 0 && s.Q.Price > 0 ? dps / s.Q.Price * 100 : s.Div;
+                picks.Add(new Plan.Pick("위성", s.Q.Code, s.Q.Name, satW, s.Q.Price, y,
+                    $"그레이엄 점수 {s.Score} · PER(3년) {s.Per3:0.0} · PBR {s.Pbr:0.00} · 무적자·재무 건전 통과", ""));
+            }
+
+            double start = (double)numStart.Value * 1e4, monthly = (double)numMonthly.Value * 1e4;
+            var t = new DataTable();
+            t.Columns.Add("분류"); t.Columns.Add("종목"); t.Columns.Add("코드");
+            foreach (var c in new[] { "비중%", "금액", "현재가", "수량(주)", "배당률%", "연 배당(세후)" }) t.Columns.Add(c, typeof(double));
+            t.Columns.Add("선정 이유"); t.Columns.Add("대안");
+            foreach (var p in picks)
+            {
+                double amt = start * p.Weight;
+                t.Rows.Add(p.Cat, p.Name, p.Code, p.Weight * 100, amt, p.Price, p.Price > 0 ? Math.Floor(amt / p.Price) : 0,
+                    p.Yield.HasValue ? p.Yield.Value : DBNull.Value, amt * (p.Yield ?? 0) / 100 * (1 - Income.TaxRate), p.Why, p.Alternatives);
+            }
+            if (sats.Count == 0) t.Rows.Add("위성", "후보 없음", "", Portfolio.Target[3] * 100, start * Portfolio.Target[3], 0, 0, DBNull.Value, 0,
+                "[가치 분석]을 먼저 실행하세요", "");
+            gridCombo.DataSource = t;
+
+            // 분류별 배당률 (위성은 고른 종목 평균) → 연도별 예상
+            double CatYield(string cat) => picks.Where(p => p.Cat == cat).Select(p => p.Yield ?? 0).DefaultIfEmpty(0).Average() / 100;
+            var yields = Portfolio.Cats.Select(CatYield).ToArray();
+            int years = (int)numYears.Value;
+            var proj = Plan.Project(start, monthly, years, Portfolio.Target, yields, (double)numGrowth.Value / 100, chkReinvest.Checked);
+            var yt = new DataTable();
+            yt.Columns.Add("연차", typeof(int));
+            foreach (var c in new[] { "누적 원금", "예상 자산", "그 해 배당", "월 평균 배당" }) yt.Columns.Add(c, typeof(double));
+            foreach (var y in proj) yt.Rows.Add(y.N, y.Principal, y.Assets, y.Dividend, y.MonthlyDividend);
+            gridYears.DataSource = yt;
+
+            txtStrategy.Text = StrategyText(start, monthly, years, yields, proj, sats.Count, satW);
+            btnApplyPlan.Enabled = true;
+            lblPlan.Text = $"{DateTime.Now:HH:mm} 기준 · 환율·시세는 Yahoo, 위성은 가치 분석({(File.Exists(Market.ScreenFile) ? File.GetLastWriteTime(Market.ScreenFile).ToString("MM.dd") : "없음")}) 결과 · 추정치이고 투자 권유가 아니에요.";
+        }
+        catch (Exception ex)
+        {
+            lblPlan.Text = "조합표를 못 만들었어요: " + ex.Message.Split('\n')[0];
+        }
+        finally
+        {
+            btnMakePlan.Enabled = true;
+        }
+    }
+
+    string StrategyText(double start, double monthly, int years, double[] yields, List<Plan.Year> proj, int satCount, double satW)
+    {
+        double goal = (double)numGoal.Value * 1e4;
+        string Name(string cat) => string.Join(", ", picks.Where(p => p.Cat == cat).Select(p => p.Name));
+        var y3 = proj[Math.Min(2, proj.Count - 1)];
+        var last = proj[^1];
+        var hit = proj.FirstOrDefault(y => y.MonthlyDividend >= goal);
+
+        // 기간 안에 목표에 못 미치면, 필요한 월 적립액을 찾는다 (이분 탐색)
+        string need = "";
+        if (hit == null)
+        {
+            double lo = monthly, hi = Math.Max(monthly, 1e4) * 64;
+            for (int i = 0; i < 40; i++)
+            {
+                double mid = (lo + hi) / 2;
+                var p = Plan.Project(start, mid, years, Portfolio.Target, yields, (double)numGrowth.Value / 100, chkReinvest.Checked);
+                if (p[^1].MonthlyDividend >= goal) hi = mid; else lo = mid;
+            }
+            need = $"   → {years}년 안에 받으려면 매달 약 {Krw(Math.Ceiling(hi / 1e4) * 1e4)}을 넣어야 해요.";
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine("【1단계 · 시작 — 이번 달 ~ 3개월】");
+        sb.AppendLine($"• 지금 투자금 {Krw(start)}을 조합표대로 사요. 한 번에 사기 부담되면 3개월에 나눠 사요(분할 매수).");
+        sb.AppendLine($"• 채권 {Portfolio.Target[0] * 100:0}% {Name("채권")} / 지수 {Portfolio.Target[1] * 100:0}% {Name("지수")} / 배당 {Portfolio.Target[2] * 100:0}% {Name("배당")}");
+        sb.AppendLine(satCount > 0
+            ? $"• 위성 {Portfolio.Target[3] * 100:0}%: {Name("위성")} — 종목당 {satW * 100:0.#}% (한 종목 ≤ {Portfolio.SatelliteMax * 100:0.#}%)"
+            : "• 위성: [가치 분석]을 먼저 실행하면 후보가 채워져요. 그 전엔 위성 몫을 배당 ETF에 둬도 돼요.");
+        sb.AppendLine("• [이 조합으로 포트폴리오 설정]을 누르면 매달 살 ETF가 정해져요.");
+        sb.AppendLine();
+        sb.AppendLine("【2단계 · 쌓기 — 1 ~ 3년차】");
+        sb.AppendLine($"• 매달 {Krw(monthly)}을 넣고 [포트폴리오] 화면의 [잔고 조회 · 배분 계산]대로 사요.");
+        sb.AppendLine($"• 비중이 ±{Portfolio.Band * 100:0.#}%p 넘게 벗어나면 그달 적립금을 부족한 쪽에 몰아 맞춰요. 파는 대신 사서 맞추기.");
+        sb.AppendLine(chkReinvest.Checked ? "• 배당은 쓰지 않고 다시 사는 데 써요(재투자)." : "• 배당은 받아서 써요(재투자 안 함).");
+        sb.AppendLine("• 분기마다 [가치 분석]을 다시 돌려 위성 종목 점검: 점수 5 미만, 적자 전환, PER(3년) 15 초과, 특별배당 경고가 뜨면 다음 적립부터 교체 후보.");
+        sb.AppendLine($"• 3년차 예상: 자산 {Krw(y3.Assets)}, 월 배당 {Krw(y3.MonthlyDividend)}");
+        sb.AppendLine();
+        sb.AppendLine($"【3단계 · 굴리기 — 4 ~ {years}년차】");
+        sb.AppendLine("• 1년에 한 번(예: 1월) 비중 점검. 위성은 3 ~ 5종목 유지.");
+        sb.AppendLine($"• {years}년차 예상: 원금 {Krw(last.Principal)} → 자산 {Krw(last.Assets)}, 월 배당 {Krw(last.MonthlyDividend)} (세후)");
+        sb.AppendLine(hit != null
+            ? $"• 목표 월 배당 {Krw(goal)}: {hit.N}년차에 도달할 것으로 보여요."
+            : $"• 목표 월 배당 {Krw(goal)}: {years}년 안에는 못 미쳐요.{need}");
+        sb.AppendLine();
+        sb.AppendLine("【4단계 · 받기 — 목표에 닿은 뒤】");
+        sb.AppendLine("• 배당 재투자를 멈추고 생활비로 받아요. 주식은 팔지 않고 배당만 꺼내 쓰는 게 원칙.");
+        sb.AppendLine("• 쓸 때가 가까워질수록 채권 비중을 늘리는 것도 검토해요 ([설정] > 포트폴리오 목표).");
+        sb.AppendLine();
+        sb.AppendLine("【가정】");
+        sb.AppendLine($"채권 이자 {yields[0] * 100:0.0}%, 주식 가격 상승 연 {numGrowth.Value:0.0}%, " +
+                      $"지수 배당 {yields[1] * 100:0.00}%, 배당 ETF {yields[2] * 100:0.00}%, 위성 평균 {yields[3] * 100:0.00}%, 배당소득세 15.4%. " +
+                      "목표 월 배당은 [배당 수입] 화면의 값을 써요. 실제 수익·배당은 달라질 수 있는 추정치이고 투자 권유가 아니에요.");
+        return sb.ToString();
+    }
+
+    // 고른 ETF를 classes.txt에 '매수' 대상으로 적는다. 다른 줄과 주석은 그대로 둔다.
+    void ApplyPlan()
+    {
+        var lines = File.Exists(Portfolio.ClassFile) ? File.ReadAllLines(Portfolio.ClassFile).ToList() : new List<string>();
+        var codes = picks.Select(p => p.Code).ToHashSet();
+        var etfCats = picks.Where(p => p.Cat != "위성").Select(p => p.Cat).ToHashSet();
+        lines = lines.Where(l =>
+        {
+            var p = l.Split(',').Select(s => s.Trim()).ToArray();
+            if (p.Length < 2 || l.TrimStart().StartsWith("#")) return true;
+            if (codes.Contains(p[0])) return false;                                  // 새로 쓸 줄
+            return !(p.Length > 2 && p[2] == "매수" && etfCats.Contains(p[1]));       // 같은 분류의 예전 '매수' 지정은 뺀다
+        }).ToList();
+        lines.Add($"# 투자 계획 {DateTime.Now:yyyy-MM-dd}");
+        foreach (var p in picks) lines.Add(p.Cat == "위성" ? $"{p.Code},위성" : $"{p.Code},{p.Cat},매수");
+        Directory.CreateDirectory(Market.Dir);
+        File.WriteAllLines(Portfolio.ClassFile, lines);
+        lblPlan.Text = $"포트폴리오 설정 완료: {string.Join(", ", picks.Where(p => p.Cat != "위성").Select(p => p.Name))}을 매달 적립 대상으로 정했어요.";
+    }
+
     // ================= 시장 =================
 
     // 지난번 시세·스크리닝 결과를 바로 띄운다 (네트워크 없이)
@@ -1003,7 +1212,7 @@ public class MainForm : Form
         "고배당" or "초고배당" => "배당수익률 높은 순",
         "꾸준배당" => "배당 연수 많은 순",
         "가치주" => "PER×PBR 낮은 순",
-        "저PER" => "PER 낮은 순",
+        "저PER" => "PER(3년 평균) 낮은 순",
         "저PBR" => "PBR 낮은 순",
         "고ROE" or "무적자" => "ROE 높은 순",
         "성장주" => "이익성장 높은 순",
@@ -1082,7 +1291,9 @@ public class MainForm : Form
         string F(double? v, string fmt, string unit = "") => v.HasValue ? v.Value.ToString(fmt) + unit : "—";
         metric["시총"].Text = $"{q.Cap / 1e12:0.0}조";
         metric["거래대금"].Text = $"{q.TradeValue / 1e8:N0}억";
-        metric["PER"].Text = F(r.Per, "0.0");
+        metric["PER(3년)"].Text = F(r.Per3, "0.0");
+        metric["PER(3년)"].ForeColor = r.Per3 <= 15 ? Theme.Good : r.Per3 != null ? Theme.Bad : Theme.Text; // 그레이엄 기준 15배
+        metric["PER(1년)"].Text = F(r.Per, "0.0");
         metric["PBR"].Text = F(r.Pbr, "0.00");
         metric["ROE"].Text = F(r.Roe, "0.0", "%");
         metric["배당수익률"].Text = F(r.Div, "0.0", "%");

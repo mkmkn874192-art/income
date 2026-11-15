@@ -200,6 +200,7 @@ public class Screener
         t.Columns.Add("시장", typeof(string));
         t.Columns.Add("배당수익률(%)", typeof(double));
         t.Columns.Add("PER", typeof(double));
+        t.Columns.Add("PER(3년)", typeof(double));
         t.Columns.Add("PBR", typeof(double));
         t.Columns.Add("ROE(%)", typeof(double));
         t.Columns.Add("주가", typeof(double));
@@ -210,7 +211,7 @@ public class Screener
         t.Columns.Add("재무연수", typeof(int));
         t.Columns.Add("적자연수", typeof(int));
         t.Columns.Add("배당연수", typeof(int));
-        string[] checkCols = { "무적자", "배당 꾸준", "이익 성장", "재무 건전", "PER×PBR≤22.5", "ROE≥10%" };
+        string[] checkCols = { "무적자", "배당 꾸준", "이익 성장", "재무 건전", "PER(3년)≤15", "PER×PBR≤22.5", "ROE≥10%" };
         foreach (var c in checkCols) t.Columns.Add(c, typeof(string));
 
         int n = 0;
@@ -226,6 +227,14 @@ public class Screener
             double? niLast = ni.TryGetValue(last, out var nl) ? nl : null;
 
             double? per = niLast > 0 ? p.Cap / niLast : null;
+            // 『현명한 투자자』: 주가 ÷ 최근 3년 평균 이익. 한 해 반짝 실적에 속지 않게 한다.
+            // (원래는 주당순이익 기준. 시총 ÷ 순이익은 그동안 주식 수가 크게 안 바뀌었다고 보는 근사치)
+            double? per3 = null;
+            if (new[] { last, last - 1, last - 2 }.All(ni.ContainsKey))
+            {
+                double avg3 = (ni[last] + ni[last - 1] + ni[last - 2]) / 3;
+                if (avg3 > 0) per3 = p.Cap / avg3;
+            }
             double? pbr = equity > 0 ? p.Cap / equity : null;
             double? roe = niLast != null && equity > 0 ? niLast / equity * 100 : null;
             double? curRatio = ca != null && cl > 0 ? ca / cl : null;
@@ -249,7 +258,8 @@ public class Screener
                 divYears >= 10,
                 growth >= 33,
                 curRatio != null ? curRatio >= 2 : debtRatio <= 100,
-                per != null && pbr != null && per * pbr <= 22.5,
+                per3 <= 15,
+                per3 != null && pbr != null && per3 * pbr <= 22.5, // 그레이엄의 PER×PBR도 3년 평균 PER 기준
                 roe >= 10,
             };
             int score = checks.Count(c => c) + ((dy ?? 0) >= 5 ? 2 : (dy ?? 0) >= 3 ? 1 : 0);
@@ -261,6 +271,7 @@ public class Screener
             r["시장"] = p.Market;
             Set(r, "배당수익률(%)", dy);
             Set(r, "PER", per, 1);
+            Set(r, "PER(3년)", per3, 1);
             Set(r, "PBR", pbr, 2);
             Set(r, "ROE(%)", roe, 1);
             r["주가"] = p.Price;

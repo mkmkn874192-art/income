@@ -97,6 +97,22 @@ public static class Yahoo
         }
     }
 
+    // 여러 심볼의 현재가·배당률(%). 국내 상장 ETF(.KS)도 된다 (단, 국내 ETF는 배당률이 비어 있다)
+    public static async Task<Dictionary<string, (double price, double? yield)>> Quotes(IEnumerable<string> symbols)
+    {
+        await EnsureCrumb();
+        var txt = await http.GetStringAsync(
+            $"{Host}/v7/finance/quote?symbols={Uri.EscapeDataString(string.Join(",", symbols))}&crumb={Uri.EscapeDataString(crumb)}");
+        using var doc = JsonDocument.Parse(txt);
+        var map = new Dictionary<string, (double, double?)>();
+        foreach (var q in doc.RootElement.GetProperty("quoteResponse").GetProperty("result").EnumerateArray())
+        {
+            double y = D(q, "dividendYield");
+            map[S(q, "symbol")] = (D(q, "regularMarketPrice"), y > 0 ? y : null);
+        }
+        return map;
+    }
+
     // 국장 종목코드 → Yahoo 심볼 (코스피 .KS, 코스닥 .KQ). 미국은 그대로.
     public static string Symbol(Quote q) => q.IsUs ? q.Code : q.Code + (q.Market == "KOSPI" ? ".KS" : ".KQ");
 

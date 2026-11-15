@@ -6,7 +6,7 @@ namespace KrxScreen;
 public class StockRow
 {
     public Quote Q;
-    public double? Div, Per, Pbr, Roe, Growth, DebtRatio;
+    public double? Div, Per, Per3, Pbr, Roe, Growth, DebtRatio; // Per3 = 그레이엄 PER (3년 평균 이익)
     public int? Score, DivYears;
     public readonly List<string> Labels = new();
     public double Rank; // 시장 내 시총 순위
@@ -23,8 +23,8 @@ public static class Labels
         new("고배당", new[] { "배당주", "배당", "고배당", "고배당주", "배당높은", "배당많은" }, r => r.Div, NeedsScreen: true),
         new("초고배당", new[] { "초고배당" }, r => r.Div, NeedsScreen: true),
         new("꾸준배당", new[] { "꾸준배당", "배당귀족", "연속배당", "장기배당" }, r => r.DivYears, NeedsScreen: true),
-        new("가치주", new[] { "가치주", "가치", "저평가", "저평가주" }, r => r.Per * r.Pbr, Asc: true, NeedsScreen: true),
-        new("저PER", new[] { "저per", "per낮은" }, r => r.Per, Asc: true, NeedsScreen: true),
+        new("가치주", new[] { "가치주", "가치", "저평가", "저평가주" }, r => r.Per3 * r.Pbr, Asc: true, NeedsScreen: true),
+        new("저PER", new[] { "저per", "per낮은", "그레이엄per" }, r => r.Per3, Asc: true, NeedsScreen: true),
         new("저PBR", new[] { "저pbr", "pbr낮은", "자산주" }, r => r.Pbr, Asc: true, NeedsScreen: true),
         new("고ROE", new[] { "고roe", "roe", "roe높은", "수익성" }, r => r.Roe, NeedsScreen: true),
         new("성장주", new[] { "성장주", "성장", "이익성장" }, r => r.Growth, NeedsScreen: true),
@@ -64,16 +64,16 @@ public static class Labels
             foreach (DataRow s in screen.Rows)
             {
                 if (!byCode.TryGetValue(s["종목코드"] as string ?? "", out var r)) continue;
-                double? D(string c) => s[c] is double v ? v : null;
-                r.Div = D("배당수익률(%)"); r.Per = D("PER"); r.Pbr = D("PBR"); r.Roe = D("ROE(%)");
+                double? D(string c) => s.Table.Columns.Contains(c) && s[c] is double v ? v : null; // 예전 결과 파일엔 없는 열도 있다
+                r.Div = D("배당수익률(%)"); r.Per = D("PER"); r.Per3 = D("PER(3년)"); r.Pbr = D("PBR"); r.Roe = D("ROE(%)");
                 r.Growth = D("이익성장(%)"); r.DebtRatio = D("부채비율(%)");
                 r.Score = s["점수"] as int?; r.DivYears = s["배당연수"] as int?;
-                bool O(string c) => (s[c] as string) == "O";
+                bool O(string c) => s.Table.Columns.Contains(c) && (s[c] as string) == "O";
                 if (r.Div >= 3) r.Labels.Add("고배당");
                 if (r.Div >= 5) r.Labels.Add("초고배당");
                 if (r.DivYears >= 10) r.Labels.Add("꾸준배당");
                 if (O("PER×PBR≤22.5")) r.Labels.Add("가치주");
-                if (r.Per is > 0 and <= 10) r.Labels.Add("저PER");
+                if (r.Per3 is > 0 and <= 10) r.Labels.Add("저PER");
                 if (r.Pbr is > 0 and < 1) r.Labels.Add("저PBR");
                 if (r.Roe >= 15) r.Labels.Add("고ROE");
                 if (O("이익 성장")) r.Labels.Add("성장주");
