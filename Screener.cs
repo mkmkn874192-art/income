@@ -211,7 +211,7 @@ public class Screener
         t.Columns.Add("재무연수", typeof(int));
         t.Columns.Add("적자연수", typeof(int));
         t.Columns.Add("배당연수", typeof(int));
-        string[] checkCols = { "무적자", "배당 꾸준", "이익 성장", "재무 건전", "PER(3년)≤15", "PER×PBR≤22.5", "ROE≥10%" };
+        string[] checkCols = { "흑자 지속", "배당 꾸준", "이익 성장", "재무 건전", "PER(3년)≤15", "PER×PBR≤22.5", "ROE≥10%" };
         foreach (var c in checkCols) t.Columns.Add(c, typeof(string));
 
         int n = 0;

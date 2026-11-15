@@ -88,6 +88,36 @@ internal static class Program
             sb.Append($"\n   참고: " + string.Join(" / ", Backtest.Run(assets, data, 120, 1e7, 1e6, true, true).Notes));
             return sb.ToString();
         });
+        await Try("회사 소개 번역", async () => await Translate.ToKorean("Apple Inc. designs, manufactures, and markets smartphones, personal computers, tablets, wearables, and accessories worldwide.") + (Translate.LastError is string e ? " [실패: " + e + "]" : ""));
+        await Try("대가 따라하기 (지난 10년, 1,000만원 한 번에 / 최소 금액)", async () =>
+        {
+            var (_, kr) = Market.LoadCached();
+            System.Data.DataTable screen = null;
+            if (File.Exists(Market.ScreenFile))
+            {
+                screen = new System.Data.DataTable();
+                screen.ReadXml(Market.ScreenFile);
+                if (screen.Columns["무적자"] is System.Data.DataColumn old) old.ColumnName = "흑자 지속";
+            }
+            var rows = Labels.Build(kr ?? new(), screen);
+            var byCode = rows.ToDictionary(r => r.Q.Code);
+            var sb = new System.Text.StringBuilder();
+            foreach (var s in Masters.All)
+            {
+                var (list, notes) = Masters.Build(s, rows, _ => false, Plan.Satellites(rows, screen, _ => false, 4), 40);
+                var assets = list.Select(h => new Backtest.Asset(byCode.TryGetValue(h.Code, out var r) ? Yahoo.Symbol(r.Q) : h.Code + ".KS", h.Name, h.Weight * 100, h.Proxy)).ToList();
+                var data = await Backtest.Load(assets);
+                var res = Backtest.Run(assets, data, 120, 1e7, 0, true, true);
+                var k = Backtest.EntryRisk(assets, data, 120, true);
+                var prices = assets.Select(a => data[a.Symbol].Count > 0 ? data[a.Symbol].Last().Value.close : 0).ToArray();
+                var (min, _) = prices.All(p => p > 0) ? Backtest.MinMonthly(assets, prices, 0.05) : (double.NaN, null);
+                sb.Append($"\n   {s.Who}: {string.Join(", ", list.Select(h => $"{h.Name} {h.Weight * 100:0.#}"))}" +
+                          $"\n      연평균 {res.Cagr:0.0}%, 최대낙폭 {res.Mdd:0.0}%, 최악시점 {k.WorstMonth:yyyy.MM} → 지금 {k.WorstNow:+0.0;-0.0}% (그 뒤 최저 {k.WorstLow:0.0}%), " +
+                          $"손해 비율 {k.LossShare:0}%, 회복 최장 {k.LongestUnderwater}개월, 최소 월 적립 {min / 1e4:N0}만" +
+                          (notes.Count > 0 ? " · " + string.Join(" / ", notes) : ""));
+            }
+            return sb.ToString();
+        });
         foreach (var sym in new[] { "O", "KO", "005930.KS", "458730.KS", "017800.KS" })
             await Try($"배당 기록 {sym}", async () =>
             {

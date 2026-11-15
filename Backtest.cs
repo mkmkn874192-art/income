@@ -127,6 +127,41 @@ public static class Backtest
                           cagr * 100, mdd * 100, worst * 100, notes.Distinct().ToList());
     }
 
+    // 고점에 물린 경우: 지난 months개월 중 아무 달에나 한꺼번에 샀다면 지금 어떤 상태인지.
+    // 적립 없이 한 번에 산 돈은 수익률(Nav)과 같은 비율로 움직이므로 Nav 비율로 계산한다 (비중 맞추는 달이 조금 다른 차이는 무시).
+    public record Risk(DateTime WorstMonth, double WorstNow, double WorstLow, double LossShare, double YearLossShare,
+                       int LongestUnderwater, bool StillUnder, DateTime PeakMonth, double FromPeak);
+
+    public static Risk EntryRisk(List<Asset> assets, Dictionary<string, SortedDictionary<DateTime, (double close, double div)>> data,
+                                 int months, bool rebalance)
+    {
+        var s = Run(assets, data, months, 1e7, 0, rebalance, true).Series;
+        var nav = s.Select(p => p.Nav).ToArray();
+        int n = nav.Length, worst = 0;
+        double worstNow = double.MaxValue, worstLow = 0;
+        int loss = 0, starts = Math.Max(1, n - 3); // 마지막 석 달에 산 경우는 빼고 본다
+        for (int i = 0; i < starts; i++)
+        {
+            double now = nav[^1] / nav[i] - 1;
+            if (now < 0) loss++;
+            if (now < worstNow) { worstNow = now; worst = i; }
+        }
+        for (int j = worst; j < n; j++) worstLow = Math.Min(worstLow, nav[j] / nav[worst] - 1);
+        int yearLoss = 0, years = 0;
+        for (int i = 12; i < n; i++, years++) if (nav[i] < nav[i - 12]) yearLoss++;
+
+        // 직전 최고점을 다시 넘기까지 걸린 가장 긴 기간
+        int longest = 0, run = 0, peakAt = 0;
+        double peak = nav[0];
+        for (int i = 1; i < n; i++)
+        {
+            if (nav[i] >= peak) { peak = nav[i]; peakAt = i; run = 0; }
+            else longest = Math.Max(longest, ++run);
+        }
+        return new Risk(s[worst].Month, worstNow * 100, worstLow * 100, loss * 100.0 / starts, years > 0 ? yearLoss * 100.0 / years : double.NaN,
+                        longest, run > 0, s[peakAt].Month, (nav[^1] / peak - 1) * 100);
+    }
+
     // 1주 단위로만 살 수 있을 때, 매달 목표 비중을 크게 벗어나지 않고 살 수 있는 최소 월 적립액.
     // 매달 '가장 모자란 자산'부터 1주씩 사는 방식으로 12개월 돌려 본다.
     public static (double amount, List<string> slow) MinMonthly(List<Asset> assets, double[] prices, double band)

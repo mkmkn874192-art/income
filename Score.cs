@@ -54,7 +54,7 @@ public static class Score
             Add("배당 주기", d.FreqRank switch { 4 => 5, 3 => 4, 2 => 2, 1 => 1, _ => 0 }, 5);
         }
         else if (r.DivYears != null)
-            Add("배당 안정", Math.Min(r.DivYears.Value, 10) / 10.0 * 15 + (r.Labels.Contains("무적자") ? 10 : 3) + 2.5, 30);
+            Add("배당 안정", Math.Min(r.DivYears.Value, 10) / 10.0 * 15 + (r.Labels.Contains("흑자 지속") ? 10 : 3) + 2.5, 30);
 
         // 가치 (그레이엄, 국장 가치 분석 종목만)
         if (r.Per3 != null || r.Score != null)

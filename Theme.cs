@@ -25,7 +25,7 @@ static class Theme
     public static readonly Color Disabled = Color.FromArgb(52, 52, 58);
     public static readonly Color HeaderBg = Color.FromArgb(24, 24, 27);
     public static readonly Color AltRow = Color.FromArgb(23, 23, 26);
-    // 채권 / 지수 / 배당 / 위성
+    // 채권 / 지수 / 배당 / 개별주
     public static readonly Color[] CatColors =
     {
         Color.FromArgb(96, 165, 250), Color.FromArgb(167, 139, 250), Color.FromArgb(52, 211, 153), Color.FromArgb(251, 191, 36),
@@ -51,9 +51,9 @@ static class Theme
 
     static Button Btn(string text, Color bg, Color fg)
     {
-        var b = new Button
+        var b = new RoundButton
         {
-            Text = text, AutoSize = true, Height = 34, MinimumSize = new Size(0, 34), Padding = new Padding(12, 0, 12, 0),
+            Text = text, AutoSize = true, Height = 36, MinimumSize = new Size(0, 36), Padding = new Padding(18, 0, 18, 0),
             FlatStyle = FlatStyle.Flat, BackColor = bg, ForeColor = fg, Font = Bold, Cursor = Cursors.Hand,
             Margin = new Padding(0, 0, 8, 0), UseVisualStyleBackColor = false,
         };
@@ -154,8 +154,8 @@ static class Theme
     {
         "고배당" or "초고배당" or "꾸준배당" => Color.FromArgb(52, 211, 153),
         "가치주" or "저PER" or "저PBR" => Color.FromArgb(96, 165, 250),
-        "고ROE" or "성장주" or "그레이엄 우수" => Color.FromArgb(167, 139, 250),
-        "재무건전" or "무적자" => Color.FromArgb(45, 212, 191),
+        "고ROE" or "성장주" or "가치 점수 우수" => Color.FromArgb(167, 139, 250),
+        "재무건전" or "흑자 지속" => Color.FromArgb(45, 212, 191),
         "급등" => Up,
         "급락" => Down,
         "거래대금 상위" => Color.FromArgb(251, 191, 36),
@@ -163,13 +163,13 @@ static class Theme
     };
 }
 
-// 어두운 카드 + 1px 테두리. 제목이 있으면 위에 붙는다.
+// 모서리가 둥근 어두운 카드 + 1px 테두리. 제목이 있으면 위에 붙는다.
 class Card : Panel
 {
     public Card(string title = null, Control content = null)
     {
         BackColor = Theme.CardBg;
-        Padding = new Padding(14, 10, 14, 12);
+        Padding = new Padding(16, 12, 16, 14);
         Dock = DockStyle.Fill;
         Margin = new Padding(0, 0, 12, 12);
         DoubleBuffered = true;
@@ -181,14 +181,49 @@ class Card : Panel
         }
     }
 
+    // 바깥 모서리는 부모 배경색으로 칠하고 그 위에 둥근 카드를 그린다 (안쪽 내용은 여백 안에 있어 모서리를 가리지 않는다)
     protected override void OnPaint(PaintEventArgs e)
     {
-        base.OnPaint(e);
+        var g = e.Graphics;
+        float s = DeviceDpi / 96f;
+        g.Clear(Parent?.BackColor ?? Theme.Bg);
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        using var path = Theme.Round(new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f), 14 * s);
+        using (var fill = new SolidBrush(BackColor)) g.FillPath(fill, path);
         using var pen = new Pen(Theme.Border);
-        e.Graphics.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
+        g.DrawPath(pen, path);
     }
 
     protected override void OnResize(EventArgs e) { base.OnResize(e); Invalidate(); }
+}
+
+// 알약 모양 버튼. 마우스를 올리면 조금 밝아진다.
+class RoundButton : Button
+{
+    bool hover;
+
+    public RoundButton()
+    {
+        SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint, true);
+        MouseEnter += (_, _) => { hover = true; Invalidate(); };
+        MouseLeave += (_, _) => { hover = false; Invalidate(); };
+    }
+
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        var g = e.Graphics;
+        g.Clear(Parent?.BackColor ?? Theme.Bg);
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        using var path = Theme.Round(new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f), Height / 2f);
+        var bg = hover && Enabled ? ControlPaint.Light(BackColor, 0.15f) : BackColor;
+        using (var fill = new SolidBrush(bg)) g.FillPath(fill, path);
+        if (FlatAppearance.BorderSize > 0)
+        {
+            using var pen = new Pen(FlatAppearance.BorderColor);
+            g.DrawPath(pen, path);
+        }
+        TextRenderer.DrawText(g, Text, Font, ClientRectangle, ForeColor, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+    }
 }
 
 // 요약 숫자 카드
@@ -301,7 +336,7 @@ class NavItem : Control
         g.SmoothingMode = SmoothingMode.AntiAlias;
         if (active || hover)
         {
-            using var path = Theme.Round(new RectangleF(10 * s, 3 * s, Width - 20 * s, Height - 6 * s), 8 * s);
+            using var path = Theme.Round(new RectangleF(10 * s, 3 * s, Width - 20 * s, Height - 6 * s), 12 * s);
             using var b = new SolidBrush(active ? Theme.AccentSoft : Theme.SidebarHover);
             g.FillPath(b, path);
         }

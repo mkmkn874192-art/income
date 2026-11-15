@@ -3,7 +3,7 @@ using System.Data;
 namespace KrxScreen;
 
 // 목표 비중에 맞춘 추천 조합과 기간별 예상치.
-// 채권·지수·배당은 국내 상장 ETF(종목코드는 Yahoo에서 이름을 확인한 것만), 위성은 가치 분석 통과 종목.
+// 채권·지수·배당은 국내 상장 ETF(종목코드는 Yahoo에서 이름을 확인한 것만), 개별주는 가치 분석 통과 종목.
 public static class Plan
 {
     // 분류별 후보. 첫 번째가 기본 추천, 나머지는 대안. Proxy = 같은 지수를 따르는 미국 ETF(배당률을 빌려 씀).
@@ -31,14 +31,14 @@ public static class Plan
 
     public record Pick(string Cat, string Code, string Name, double Weight, double Price, double? Yield, string Why, string Alternatives);
 
-    // 위성: 무적자·재무 건전·PER(3년)≤15 통과 → 점수, 배당률 순. 같은 그룹(이름 앞 두 글자)은 하나만, 특별배당 의심 제외.
+    // 개별주: 흑자 지속·재무 건전·PER(3년)≤15 통과 → 점수, 배당률 순. 같은 그룹(이름 앞 두 글자)은 하나만, 특별배당 의심 제외.
     public static List<StockRow> Satellites(IEnumerable<StockRow> rows, DataTable screen, Func<string, bool> maybeSpecial, int count)
     {
         if (screen == null) return new();
         var pass = new HashSet<string>();
         bool Has(DataRow r, string c) => screen.Columns.Contains(c) && (r[c] as string) == "O";
         foreach (DataRow r in screen.Rows)
-            if (Has(r, "무적자") && Has(r, "재무 건전") && Has(r, "PER(3년)≤15")) pass.Add(r["종목코드"] as string);
+            if (Has(r, "흑자 지속") && Has(r, "재무 건전") && Has(r, "PER(3년)≤15")) pass.Add(r["종목코드"] as string);
 
         var list = new List<StockRow>();
         foreach (var r in rows.Where(r => pass.Contains(r.Q.Code) && !maybeSpecial(r.Q.Code))

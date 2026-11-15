@@ -36,8 +36,8 @@ public static class Labels
         new("고ROE", new[] { "고roe", "roe", "roe높은", "수익성" }, r => r.Roe, NeedsScreen: true),
         new("성장주", new[] { "성장주", "성장", "이익성장" }, r => r.Growth, NeedsScreen: true),
         new("재무건전", new[] { "재무건전", "안정", "안정적", "안전" }, r => r.DebtRatio, Asc: true, NeedsScreen: true),
-        new("무적자", new[] { "무적자", "흑자", "꾸준흑자" }, r => r.Roe, NeedsScreen: true),
-        new("그레이엄 우수", new[] { "그레이엄", "그레이엄우수", "고득점", "점수높은" }, r => r.Score, NeedsScreen: true),
+        new("흑자 지속", new[] { "무적자", "흑자", "꾸준흑자" }, r => r.Roe, NeedsScreen: true),
+        new("가치 점수 우수", new[] { "그레이엄", "그레이엄우수", "가치점수", "고득점", "점수높은" }, r => r.Score, NeedsScreen: true),
         new("대형주", new[] { "대형주", "대형", "우량주", "블루칩", "시총상위" }, r => r.Q.Cap),
         new("중형주", new[] { "중형주", "중형" }, r => r.Q.Cap),
         new("소형주", new[] { "소형주", "소형", "중소형" }, r => r.Q.Cap),
@@ -51,8 +51,8 @@ public static class Labels
         new("월배당", new[] { "월배당", "매달배당", "월배당주" }, r => r.Total),
         new("분기배당", new[] { "분기배당", "분기배당주" }, r => r.Total),
         new("배당안정", new[] { "배당안정", "안정배당", "배당안정성", "배당귀족주" }, r => r.Total),
-        new("낙폭과대", new[] { "낙폭과대", "많이내린", "고점대비하락", "저점", "낙폭" }, r => r.Q.FromHigh, Asc: true),
-        new("고점근처", new[] { "고점근처", "신고가", "고점" }, r => r.Q.FromHigh),
+        new("많이 내린", new[] { "낙폭과대", "많이내린", "고점대비하락", "저점", "낙폭" }, r => r.Q.FromHigh, Asc: true),
+        new("고점 근처", new[] { "고점근처", "신고가", "고점" }, r => r.Q.FromHigh),
         new("미국", new[] { "미국", "미장", "us", "미국주식", "해외", "해외주식" }, r => r.Q.Cap),
         new("ETF", new[] { "etf", "이티에프" }, r => r.Q.Cap),
     };
@@ -70,15 +70,15 @@ public static class Labels
         if (r.DivI?.Freq == "월") Add("월배당");
         if (r.DivI?.Freq == "분기") Add("분기배당");
         if (IsStable(r)) Add("배당안정");
-        if (r.Q.FromHigh <= -30) Add("낙폭과대");
-        if (r.Q.FromHigh >= -5) Add("고점근처");
+        if (r.Q.FromHigh <= -30) Add("많이 내린");
+        if (r.Q.FromHigh >= -5) Add("고점 근처");
     }
 
-    // 배당 안정: 5년 이상 연속 배당, 최근 5년 삭감 없음, 특별배당 아님 (기록이 없으면 국장 가치 분석의 배당 연수·무적자로)
+    // 배당 안정: 5년 이상 연속 배당, 최근 5년 삭감 없음, 특별배당 아님 (기록이 없으면 국장 가치 분석의 배당 연수·흑자 지속로)
     public static bool IsStable(StockRow r) =>
         r.DivI != null && r.DivI.Freq != "없음"
             ? r.DivI.Years >= 5 && r.DivI.Cuts == 0 && !r.DivI.Special
-            : r.DivYears >= 10 && r.Labels.Contains("무적자");
+            : r.DivYears >= 10 && r.Labels.Contains("흑자 지속");
 
     public static Rule Find(string token)
     {
@@ -109,8 +109,8 @@ public static class Labels
                 if (r.Roe >= 15) r.Labels.Add("고ROE");
                 if (O("이익 성장")) r.Labels.Add("성장주");
                 if (O("재무 건전")) r.Labels.Add("재무건전");
-                if (O("무적자")) r.Labels.Add("무적자");
-                if (r.Score >= 7) r.Labels.Add("그레이엄 우수");
+                if (O("흑자 지속")) r.Labels.Add("흑자 지속");
+                if (r.Score >= 7) r.Labels.Add("가치 점수 우수");
             }
 
         foreach (var g in rows.GroupBy(r => r.Q.Market))
