@@ -1,6 +1,6 @@
 namespace KrxScreen;
 
-// 초보자용 용어 설명. Title = 쉬운 말로 쓴 제목(목록에 보이는 이름), Term = 정식 용어, Short = 한 줄 요약, Body = [자료실] 화면 본문.
+// 초보자용 용어 설명. Title = 쉬운 말로 쓴 제목(목록에 보이는 이름), Term = 정식 용어, Short = 한 줄 요약, Body = [용어사전] 화면 본문.
 // Body 형식: "## 소제목" 줄은 굵게, "• " 줄은 목록.
 public static class Glossary
 {

@@ -162,7 +162,7 @@ public class MainForm : Form
         AddGroup("", "시뮬레이터", ("시뮬레이터", BuildSimPage()));
         AddGroup("", "거래소", ("전체 종목", BuildMarketPage()), ("업종 판도", BuildSectorPage()), ("가치 분석", BuildScreenPage()));
         AddGroup("", "잔고", ("잔고 · 주문", BuildPortfolioPage()));
-        AddGroup("", "자료실", ("용어 · 배우기", BuildLearnPage()));
+        AddGroup("", "용어사전", ("용어사전", BuildLearnPage()));
         AddGroup("", "설정", ("설정", BuildSettingsPage()));
 
         btnSave.Click += (_, _) => { SaveKwKeys(); lblSettings.Text = "저장했어요. 다음 실행부터 자동으로 불러와요."; };
@@ -2248,7 +2248,7 @@ public class MainForm : Form
         body.Controls.Add(new Card(null, rtbLearn) { Padding = new Padding(24, 18, 12, 12) }, 1, 0);
 
         page.Controls.Add(body);
-        page.Controls.Add(Header("자료실", "궁금한 걸 쉬운 말로 찾아보세요. 제목 아래 작은 글씨가 정식 용어예요. 다른 화면에서 파란 글씨나 지표 이름을 눌러도 여기로 와요."));
+        page.Controls.Add(Header("용어사전", "궁금한 걸 쉬운 말로 찾아보세요. 제목 아래 작은 글씨가 정식 용어예요. 다른 화면에서 파란 글씨나 지표 이름을 눌러도 여기로 와요."));
         FillLearnList();
         return page;
     }
