@@ -157,11 +157,11 @@ public class MainForm : Form
         Controls.Add(content);
         Controls.Add(BuildSidebar());
         // 메뉴는 7개 묶음. 겹치는 화면은 한 메뉴 안의 탭으로 (P상수 순서와 같아야 한다)
-        AddGroup("", "재정", ("배당 수입", BuildIncomePage()), ("생활비 해금", BuildCartPage()));
+        AddGroup("", "재정재무", ("배당 수입", BuildIncomePage()), ("생활비 해금", BuildCartPage()));
         AddGroup("", "전략기획실", ("코치진 · 구성 짜기", BuildMastersPage()), ("목표 · 배분 계획", BuildPlanPage()));
-        AddGroup("", "시뮬레이션", ("시뮬레이션", BuildSimPage()));
+        AddGroup("", "시뮬레이터", ("시뮬레이터", BuildSimPage()));
         AddGroup("", "거래소", ("전체 종목", BuildMarketPage()), ("업종 판도", BuildSectorPage()), ("가치 분석", BuildScreenPage()));
-        AddGroup("", "계좌", ("실제 계좌 · 주문", BuildPortfolioPage()));
+        AddGroup("", "잔고", ("잔고 · 주문", BuildPortfolioPage()));
         AddGroup("", "자료실", ("용어 · 배우기", BuildLearnPage()));
         AddGroup("", "설정", ("설정", BuildSettingsPage()));
 
@@ -597,7 +597,7 @@ public class MainForm : Form
         page.Controls.Add(kpis);
         page.Controls.Add(Theme.Spacer(12));
         page.Controls.Add(Toolbar(btnBalance, btnOrder, lblPf));
-        page.Controls.Add(Header("계좌", "목표 비중에 맞춰 이번 달 적립금을 나눠요. 목표는 [설정]에서 바꿀 수 있고, 주문은 확인창을 거친 지정가 매수만 나가요."));
+        page.Controls.Add(Header("잔고", "목표 비중에 맞춰 이번 달 적립금을 나눠요. 목표는 [설정]에서 바꿀 수 있고, 주문은 확인창을 거친 지정가 매수만 나가요."));
         return page;
     }
 
@@ -1018,7 +1018,7 @@ public class MainForm : Form
         Item("거래소에서 자세히 보기", () => { txtSearch.Text = r.Q.Code; ShowPage(PMarket); return Task.CompletedTask; });
         Item("배당 수입에 담기 (10주)", async () => { ShowPage(PIncome); lblIncome.Text = await AddToIncome(r, 10); });
         Item("전략기획실 · 우리 팀에 추가", async () => { ShowPage(PMasters); await AddMsHolding(r); });
-        Item("시뮬레이션에 추가", () => { AddSimAsset(r); ShowPage(PSim); return Task.CompletedTask; });
+        Item("시뮬레이터에 추가", () => { AddSimAsset(r); ShowPage(PSim); return Task.CompletedTask; });
         menu.Closed += (_, _) => BeginInvoke(menu.Dispose);
         menu.Show(anchor, new Point(0, anchor.Height + 2));
     }
@@ -1070,7 +1070,7 @@ public class MainForm : Form
     readonly TextBox txtCartName = new() { Width = 170, PlaceholderText = "지출 이름 (예: 커피, 헬스장)" };
     readonly NumericUpDown numCartPrice = new() { Minimum = 0, Maximum = 100_000_000, Increment = 1000, Value = 50_000, Width = 100, ThousandsSeparator = true };
     readonly NumericUpDown numCartTimes = new() { Minimum = 1, Maximum = 31, Value = 1, Width = 50 };
-    readonly Label lblCart = Theme.Text_("지출은 직접 만들어 넣어요. 같은 이름으로 다시 넣으면 금액이 바뀌어요. 월 배당은 [재정 › 배당 수입]에 담은 종목이 기준이에요.", Theme.Small, Theme.Muted);
+    readonly Label lblCart = Theme.Text_("지출은 직접 만들어 넣어요. 같은 이름으로 다시 넣으면 금액이 바뀌어요. 월 배당은 [재정재무 › 배당 수입]에 담은 종목이 기준이에요.", Theme.Small, Theme.Muted);
 
     Control BuildCartPage()
     {
@@ -1202,7 +1202,7 @@ public class MainForm : Form
         double free = Cart.Income - total;
         kLifeFree.Set(Cart.Income > 0 ? Krw(free) : "—", free >= 0 ? null : Theme.Bad,
             Cart.Income > 0 ? $"수입 {Krw(Cart.Income)} − 지출 {Krw(total)}" : "구단주 수입을 넣어 주세요");
-        kCartDiv.Set(Krw(monthly), Color.FromArgb(52, 211, 153), invested > 0 ? $"세후 배당률 {yield * 100:0.00}%" : "[재정 › 배당 수입]에 종목을 담아 주세요");
+        kCartDiv.Set(Krw(monthly), Color.FromArgb(52, 211, 153), invested > 0 ? $"세후 배당률 {yield * 100:0.00}%" : "[재정재무 › 배당 수입]에 종목을 담아 주세요");
         kCartSum.Set(Krw(total), null, $"{rows.Count}개 항목");
 
         int gained = Cart.NewlyUnlocked(done);
@@ -1247,9 +1247,9 @@ public class MainForm : Form
         }
         sb.AppendLine("■ 계산 기준");
         sb.AppendLine(yield > 0
-            ? $"[재정 › 배당 수입]에 담은 종목의 세후 배당률 {yield * 100:0.00}%로, 주가 변화와 배당 재투자는 빼고 단순하게 계산했어요."
-            : "아직 [재정 › 배당 수입]에 담은 종목이 없어 배당률 3.5%(세전)로 예를 들었어요. 종목을 담으면 그 배당률로 다시 계산해요.");
-        sb.AppendLine("매달 넣는 금액(구단주 지원)은 [전략기획실]·[시뮬레이션]와 같은 값을 써요.");
+            ? $"[재정재무 › 배당 수입]에 담은 종목의 세후 배당률 {yield * 100:0.00}%로, 주가 변화와 배당 재투자는 빼고 단순하게 계산했어요."
+            : "아직 [재정재무 › 배당 수입]에 담은 종목이 없어 배당률 3.5%(세전)로 예를 들었어요. 종목을 담으면 그 배당률로 다시 계산해요.");
+        sb.AppendLine("매달 넣는 금액(구단주 지원)은 [전략기획실]·[시뮬레이터]와 같은 값을 써요.");
         if (Cart.Income > 0)
         {
             sb.AppendLine();
@@ -1649,7 +1649,7 @@ public class MainForm : Form
             sb.AppendLine($"• 매달 {Krw(minMonthly)} 이상이면 1주 단위로 사도 비중이 목표 ±{Portfolio.Band * 50:0.#}%p 안에서 유지돼요.");
             foreach (var x in slow) sb.AppendLine("   " + x);
         }
-        // 목표 월 배당([재정 › 배당 수입] 화면)까지 10년 안에 가려면 매달 얼마? 채권 몫은 가격 상승 없음, 나머지는 [전략기획실 › 목표·배분 계획]의 주식 상승 가정
+        // 목표 월 배당([재정재무 › 배당 수입] 화면)까지 10년 안에 가려면 매달 얼마? 채권 몫은 가격 상승 없음, 나머지는 [전략기획실 › 목표·배분 계획]의 주식 상승 가정
         double goal = (double)numGoal.Value * 1e4, growth = (double)numGrowth.Value / 100;
         var bondIdx = list.Select((h, i) => (h, i)).Where(x => x.h.Bond).Select(x => x.i).ToList();
         double bw = bondIdx.Sum(i => list[i].Weight);
@@ -1798,7 +1798,7 @@ public class MainForm : Form
         btnFromIncome.Click += (_, _) =>
         {
             double total = incomeItems.Sum(i => i.Qty * i.Price * Market.Fx(i.Currency));
-            if (total <= 0) { lblSim.Text = "[재정 › 배당 수입]에 담긴 종목이 없어요."; return; }
+            if (total <= 0) { lblSim.Text = "[재정재무 › 배당 수입]에 담긴 종목이 없어요."; return; }
             SetSimAssets(incomeItems.Select(i => (i.Code, i.Name, i.Qty * i.Price * Market.Fx(i.Currency) / total * 100)).ToList());
         };
         btnSimRun.Click += async (_, _) => await RunSim();
@@ -1888,7 +1888,7 @@ public class MainForm : Form
         page.Controls.Add(row2);
         page.Controls.Add(Theme.Spacer(6));
         page.Controls.Add(row1);
-        page.Controls.Add(Header("시뮬레이션", "이 구성으로 1·3·5·10년 전에 사서 매달 적립했다면 지금 얼마가 됐을지, 실제 과거 가격으로 계산해요."));
+        page.Controls.Add(Header("시뮬레이터", "이 구성으로 1·3·5·10년 전에 사서 매달 적립했다면 지금 얼마가 됐을지, 실제 과거 가격으로 계산해요."));
         return page;
     }
 
@@ -2326,7 +2326,7 @@ public class MainForm : Form
     readonly NumericUpDown numGrowth = new() { Minimum = -10, Maximum = 20, DecimalPlaces = 1, Increment = 0.5m, Value = 4.0m, Width = 60 };
     readonly CheckBox chkReinvest = new() { Text = "배당 재투자", AutoSize = true, Checked = true, Margin = new Padding(12, 8, 0, 0) };
     readonly Button btnMakePlan = Theme.Primary("조합표 만들기");
-    readonly Button btnApplyPlan = Theme.Secondary("이 조합을 계좌 목표로");
+    readonly Button btnApplyPlan = Theme.Secondary("이 조합을 잔고 목표로");
     readonly DataGridView gridCombo = NewGrid(true);
     readonly DataGridView gridYears = NewGrid(true);
     readonly TermText txtStrategy = new();
@@ -2517,10 +2517,10 @@ public class MainForm : Form
         sb.AppendLine(satCount > 0
             ? $"• 개별주 {Portfolio.Target[3] * 100:0}%: {Name("개별주")} — 종목당 {satW * 100:0.#}% (한 종목 ≤ {Portfolio.SatelliteMax * 100:0.#}%)"
             : "• 개별주: [거래소 › 가치 분석]을 먼저 실행하면 후보가 채워져요. 그 전엔 개별주 몫을 배당 ETF에 둬도 돼요.");
-        sb.AppendLine("• [이 조합을 계좌 목표로]를 누르면 매달 살 ETF가 정해져요.");
+        sb.AppendLine("• [이 조합을 잔고 목표로]를 누르면 매달 살 ETF가 정해져요.");
         sb.AppendLine();
         sb.AppendLine("【2단계 · 쌓기 — 1 ~ 3년차】");
-        sb.AppendLine($"• 매달 {Krw(monthly)}을 넣고 [계좌] 화면의 [잔고 조회 · 배분 계산]대로 사요.");
+        sb.AppendLine($"• 매달 {Krw(monthly)}을 넣고 [잔고] 화면의 [잔고 조회 · 배분 계산]대로 사요.");
         sb.AppendLine($"• 비중이 ±{Portfolio.Band * 100:0.#}%p 넘게 벗어나면 그달 적립금을 부족한 쪽에 몰아 맞춰요. 파는 대신 사서 맞추기.");
         sb.AppendLine(chkReinvest.Checked ? "• 배당은 쓰지 않고 다시 사는 데 써요(재투자)." : "• 배당은 받아서 써요(재투자 안 함).");
         sb.AppendLine("• 분기마다 [거래소 › 가치 분석]을 다시 돌려 개별 종목 점검: 점수 5 미만, 적자 전환, PER(3년) 15 초과, 특별배당 경고가 뜨면 다음 적립부터 교체 후보.");
@@ -2540,7 +2540,7 @@ public class MainForm : Form
         sb.AppendLine("【가정】");
         sb.AppendLine($"채권 이자 {yields[0] * 100:0.0}%, 주식 가격 상승 연 {numGrowth.Value:0.0}%, " +
                       $"지수 배당 {yields[1] * 100:0.00}%, 배당 ETF {yields[2] * 100:0.00}%, 개별주 평균 {yields[3] * 100:0.00}%, 배당소득세 15.4%. " +
-                      "목표 월 배당은 [재정 › 배당 수입] 화면의 값을 써요. 실제 수익·배당은 달라질 수 있는 추정치이고 투자 권유가 아니에요.");
+                      "목표 월 배당은 [재정재무 › 배당 수입] 화면의 값을 써요. 실제 수익·배당은 달라질 수 있는 추정치이고 투자 권유가 아니에요.");
         return sb.ToString();
     }
 
@@ -2561,7 +2561,7 @@ public class MainForm : Form
         foreach (var p in picks) lines.Add(p.Cat == "개별주" ? $"{p.Code},개별주" : $"{p.Code},{p.Cat},매수");
         Directory.CreateDirectory(Market.Dir);
         File.WriteAllLines(Portfolio.ClassFile, lines);
-        lblPlan.Text = $"계좌 목표 설정 완료: {string.Join(", ", picks.Where(p => p.Cat != "개별주").Select(p => p.Name))}을 매달 적립 대상으로 정했어요.";
+        lblPlan.Text = $"잔고 목표 설정 완료: {string.Join(", ", picks.Where(p => p.Cat != "개별주").Select(p => p.Name))}을 매달 적립 대상으로 정했어요.";
     }
 
     // ================= 시장 =================
