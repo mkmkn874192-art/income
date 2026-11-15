@@ -16,6 +16,8 @@ public class StockRow
     public DivInfo DivI;       // 배당 주기·안정성
     public SectorStat Sec;     // 속한 업종 통계
     public double? Total;      // 종합 점수 0~100
+    public int? Ovr;           // 능력 5~100 (선수 카드 능력치 평균 × 5)
+    public string Pos;         // 포지션: 수비수·미드필더·공격수
     public string ScoreNote;
 }
 
@@ -164,7 +166,7 @@ public static class Labels
             else
             {
                 string t = Norm(token);
-                q = q.Where(r => Norm(r.Q.Name).Contains(t) || r.Q.Code.Contains(token.ToUpperInvariant())
+                q = q.Where(r => Norm(r.Q.Name).Contains(t) || (r.Q.NameEn != null && Norm(r.Q.NameEn).Contains(t)) || r.Q.Code.Contains(token.ToUpperInvariant())
                                  || r.Labels.Any(l => Norm(l).Contains(t)));
             }
         }

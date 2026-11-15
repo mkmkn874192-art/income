@@ -11,6 +11,7 @@ public record Quote(string Code, string Name, string Market, double Price, doubl
     public double? DivYield { get; init; } // %, 미국만 (국내는 DART 결산에서 계산)
     public double? Dps { get; init; }      // 연간 주당배당금, 그 나라 통화
     public bool IsUs => Currency == "USD";
+    public string NameEn { get; init; } // 미국 종목의 원래 영어 이름 (Name은 한글 별명)
 
     // Yahoo에서 덧붙이는 업종·추세 (모두 %). 국장은 KrTrends로 채운다.
     public string Sector { get; init; }

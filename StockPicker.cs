@@ -48,7 +48,7 @@ class StockPicker : Panel
             var b = e.Bounds;
             TextRenderer.DrawText(e.Graphics, r.Q.Name, Theme.Bold, new Rectangle(b.X + 10, b.Y, b.Width / 2, b.Height), Theme.Text,
                 TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
-            string price = r.Q.IsUs ? $"${r.Q.Price:N2}" : $"{r.Q.Price:N0}원";
+            string price = Won.Price(r.Q.Price, r.Q.Currency);
             TextRenderer.DrawText(e.Graphics, $"{r.Q.Code} · {(r.Q.IsUs ? "미국" : r.Q.Market)} · {price}", Theme.Small,
                 new Rectangle(b.X + b.Width / 2, b.Y, b.Width / 2 - 10, b.Height), Theme.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.Right);
         };

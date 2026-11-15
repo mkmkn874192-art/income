@@ -281,6 +281,19 @@ class Pill : Control
 
     protected override void OnTextChanged(EventArgs e) { base.OnTextChanged(e); Size = GetPreferredSize(Size.Empty); Invalidate(); }
 
+    // 화면 읽기 프로그램·UI 자동화에서 버튼으로 보이고 누를 수 있게
+    protected override AccessibleObject CreateAccessibilityInstance() => new PillAccessible(this);
+
+    class PillAccessible : ControlAccessibleObject
+    {
+        readonly Pill pill;
+        public PillAccessible(Pill pill) : base(pill) => this.pill = pill;
+        public override AccessibleRole Role => AccessibleRole.PushButton;
+        public override string Name => pill.Text;
+        public override string DefaultAction => "Press";
+        public override void DoDefaultAction() => pill.InvokeOnClick(pill, EventArgs.Empty);
+    }
+
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;

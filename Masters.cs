@@ -2,6 +2,8 @@ namespace KrxScreen;
 
 // 투자 대가 따라하기: 널리 알려진 원칙을 이 앱의 자료(국내 상장 ETF + 가치 분석 결과)로 단순하게 옮긴 것.
 // 대가가 실제로 이렇게 투자했다는 뜻이 아니라 '공개된 원칙을 앱이 해석한 구성'이다.
+// 축구팀처럼: 감독 = 나(기본 전술), 수석코치 = 유명 투자자(팀 구성을 통째로), 코치 = 덜 알려진 투자자(구성을 조금 바꿈),
+// 구단주 = 나에게 돈을 주는 곳(월급 등, 매달 지원금).
 public static class Masters
 {
     public record Holding(string Code, string Name, double Weight, string Proxy, bool Bond, string Why);
@@ -23,11 +25,15 @@ public static class Masters
         _ => throw new ArgumentException(code),
     };
 
+    // 앱이 쓰는 국내 상장 ETF (시세 목록엔 ETF가 없어서 검색에 따로 넣는다)
+    public static IEnumerable<(string Code, string Name)> KnownEtfs =>
+        new[] { "114260", "148070", "360750", "133690", "069500", "458730", "411060" }.Select(c => Etf(c, 0, "")).Select(h => (h.Code, h.Name));
+
     public static readonly Style[] All =
     {
-        new("income", MainForm.AppName + " 기본", "배당으로 매달 들어오는 돈",
-            "채권 50 · 미국 지수 20 · 배당 ETF 20 · 개별주 10",
-            "흔들림을 줄이는 채권을 절반 두고, 미국 대표 지수와 배당 ETF로 꾸준히 배당을 받아요. 개별주는 앱의 가치 분석을 통과한 종목 몇 개만 조금 담아요.",
+        new("income", "수석코치 없음", "감독(나)의 기본 전술",
+            "채권 50 · 미국 지수 20 · 배당 ETF 20 · 개별주 10 (설정에서 바꿈)",
+            "수석코치 없이 감독인 내가 정한 기본 비중으로 가요. 흔들림을 줄이는 채권을 절반 두고, 미국 대표 지수와 배당 ETF로 꾸준히 배당을 받아요. 개별주는 앱의 가치 분석을 통과한 종목 몇 개만 조금 담아요.",
             "배당에 무게를 둬서 크게 오르는 장에서는 주식만 산 사람보다 덜 벌어요.", false),
         new("buffett", "워런 버핏", "평범한 사람에게 권한 방법",
             "미국 S&P500 90 · 단기 국채 10",
@@ -55,6 +61,27 @@ public static class Masters
             "덜 흔들리는 대신 주식이 크게 오르는 장에서는 많이 뒤처져요. 금리가 빠르게 오를 때는 채권과 주식이 같이 떨어질 수 있어요.", false),
     };
 
+    // 코치: 덜 알려진 투자자. 영입하면 대표 종목 10%를 데려오고, 개별주를 고를 때 자기가 보는 능력치를 더 본다.
+    public static readonly Style[] Coaches =
+    {
+        new("greenblatt", "조엘 그린블랫", "마법 공식: 돈 잘 버는 회사를 싸게",
+            "돈 잘 버는데 싼 종목 1개 10%",
+            "『주식시장을 이기는 작은 책』에서 '자본 대비 이익(ROE)이 높고, 이익에 비해 싼 회사'를 순위로 골라 사는 마법 공식을 소개했어요.",
+            "순위가 높아도 한두 해는 시장보다 못할 수 있어요.", false),
+        new("siegel", "제레미 시겔", "배당 주는 우량주를 오래",
+            "배당 ETF 10%",
+            "『주식에 장기투자하라』에서 오래 배당을 늘려 온 회사들이 장기적으로 좋은 성과를 냈다고 했어요.",
+            "배당에 치우치면 성장주가 강한 장에서 뒤처질 수 있어요.", false),
+        new("marks", "하워드 막스", "잃지 않는 게 먼저",
+            "국고채 10% · 튼튼한 종목 우선",
+            "『투자에 대한 생각』에서 위험을 아는 게 수익보다 먼저이고, 시장이 들떠 있을 때 조심하라고 했어요.",
+            "안전에 무게를 둬서 오르는 장에서는 덜 벌어요.", false),
+        new("rogers", "짐 로저스", "실물 자산으로 물가 대비",
+            "금 10%",
+            "원자재·실물 자산에 투자해 물가가 오를 때를 대비하라고 했어요. 앱은 금 ETF로 대신해요.",
+            "금은 배당이 없고, 오랫동안 오르지 않을 때도 있어요.", false),
+    };
+
     // 비교용 기준선 (한 상품에 전부)
     public static readonly (string Name, Holding[] List)[] References =
     {
@@ -76,7 +103,7 @@ public static class Masters
         string Horizon = new[] { "3년 안에 쓸 수도 있는 돈", "3~10년 둘 돈", "10년 넘게 둘 돈" }[horizon];
         string Drop = new[] { "20% 떨어지면 팔고 싶은 편", "불안해도 버티는 편", "오히려 더 사는 편" }[drop];
         string Goal = new[] { "매달 들어오는 배당", "배당과 자산 키우기 둘 다", "자산 키우기" }[goal];
-        var reason = $"{Horizon}이고, {Drop}이고, {Goal}을 원한다고 하셨어요. → {s.Who} 방식이 맞아 보여요.\n";
+        var reason = $"{Horizon}이고, {Drop}이고, {Goal}을 원한다고 하셨어요. → " + (key == "income" ? "수석코치 없이 감독(나)의 기본 전술이 맞아 보여요.\n" : $"{s.Who}를 수석코치로 모시면 좋아 보여요.\n");
         reason += key switch
         {
             "income" => "채권이 절반이라 덜 흔들리고, 배당이 매달·분기마다 들어와요.",
@@ -86,14 +113,54 @@ public static class Masters
             "buffett" => "오래 둘 수 있고 하락에도 흔들리지 않는다면, 미국 대표 지수에 대부분을 두는 게 가장 단순하고 강한 방법이에요.",
             _ => $"채권 {Math.Clamp(age, 20, 80)}%(나이만큼)로 흔들림을 줄이고, 나머지는 시장 전체를 사요. 고를 게 없어 오래 지키기 쉬워요.",
         };
-        reason += "\n종목을 직접 골라 보고 싶다면 그레이엄·멍거·린치 방식을 눌러 보세요.";
+        reason += "\n종목을 직접 고르는 팀을 원하면 그레이엄·멍거·린치를 수석코치로 골라 보세요.";
         return (s, reason);
     }
 
     // 방식 → 구성. income의 개별주는 투자 계획과 같은 규칙(Plan.Satellites)으로 고른 것을 받는다.
-    public static (List<Holding> list, List<string> notes) Build(Style s, List<StockRow> rows, Func<string, bool> maybeSpecial,
-                                                                  List<StockRow> incomePicks, int age)
+    // 코치마다 개별주를 고를 때 더 보는 능력치 (선수 카드의 능력치 이름)
+    public static string[] Focus(string key) => key switch
     {
+        "greenblatt" => new[] { "돈 버는 힘", "가격 매력" },
+        "siegel" => new[] { "배당력", "배당 꾸준함" },
+        "marks" => new[] { "재무 체력", "안정감" },
+        _ => Array.Empty<string>(),
+    };
+
+    // 코치로 영입하면 데려오는 대표 종목 (구성의 10%). 종목 고르는 코치는 자기 기준 1위 중 아직 없는 종목.
+    public static Holding Signature(Style coach, List<StockRow> rows, Func<string, bool> maybeSpecial, ISet<string> have, int age)
+    {
+        const double w = 0.1;
+        string why = $"{coach.Who} 코치가 데려옴";
+        switch (coach.Key)
+        {
+            case "siegel": return Etf("458730", w, why + " · 배당 ETF");
+            case "marks": return Etf("114260", w, why + " · 국고채");
+            case "rogers": return Etf("411060", w, why + " · 금");
+        }
+        // 그린블랫: 흑자 지속 종목 중 ROE 순위 + 싼 순위(이익수익률)의 합이 가장 좋은 종목
+        var kr = rows.Where(r => !r.Q.IsUs && r.Q.Price > 0 && r.Per3 > 0 && r.Roe > 0 && r.Labels.Contains("흑자 지속") && !maybeSpecial(r.Q.Code) && !have.Contains(r.Q.Code)).ToList();
+        var roeRank = kr.OrderByDescending(r => r.Roe).Select((r, i) => (r.Q.Code, i)).ToDictionary(x => x.Code, x => x.i);
+        var cheapRank = kr.OrderBy(r => r.Per3).Select((r, i) => (r.Q.Code, i)).ToDictionary(x => x.Code, x => x.i);
+        var best = kr.OrderBy(r => roeRank[r.Q.Code] + cheapRank[r.Q.Code]).FirstOrDefault();
+        return best == null ? Etf("069500", w, why + " · 가치 분석 결과가 없어 한국 지수로")
+                            : new(best.Q.Code, best.Q.Name, w, null, false, $"{why} · ROE {best.Roe:0}% · 3년 PER {best.Per3:0.0}");
+    }
+
+    // 코치들이 데려온 종목을 10%씩 넣고 나머지는 같은 비율로 줄인다
+    public static List<Holding> WithCoaches(List<Holding> list, IEnumerable<Holding> signatures)
+    {
+        var sig = signatures.ToList();
+        double keep = 1 - sig.Sum(h => h.Weight);
+        return list.Select(h => h with { Weight = h.Weight * keep }).Concat(sig)
+                   .GroupBy(h => h.Code).Select(g => g.First() with { Weight = g.Sum(h => h.Weight) }).ToList();
+    }
+
+    public static (List<Holding> list, List<string> notes) Build(Style s, List<StockRow> rows, Func<string, bool> maybeSpecial,
+                                                                  List<StockRow> incomePicks, int age, string[] focus = null)
+    {
+        focus ??= Array.Empty<string>();
+        double FocusScore(StockRow r) => Scout.Attributes(r).Where(a => focus.Contains(a.Name)).Sum(a => a.Value ?? 0);
         var notes = new List<string>();
         var kr = rows.Where(r => !r.Q.IsUs && r.Q.Price > 0 && r.Per3 != null).ToList();
 
@@ -101,7 +168,10 @@ public static class Masters
         List<StockRow> Pick(Func<StockRow, bool> ok, Func<StockRow, double> order, int n)
         {
             var list = new List<StockRow>();
-            foreach (var r in kr.Where(ok).Where(r => !maybeSpecial(r.Q.Code)).OrderBy(order))
+            IEnumerable<StockRow> pool = kr.Where(ok).Where(r => !maybeSpecial(r.Q.Code)).OrderBy(order);
+            // 코치진이 보는 능력치가 있으면, 기준 상위 후보 안에서 그 능력치가 높은 순으로 다시 고른다
+            if (focus.Length > 0) pool = pool.Take(n * 3).Select((r, i) => (r, i)).OrderByDescending(x => FocusScore(x.r)).ThenBy(x => x.i).Select(x => x.r);
+            foreach (var r in pool)
             {
                 if (list.Any(x => x.Q.Name.Length >= 2 && r.Q.Name.StartsWith(x.Q.Name[..2]))) continue;
                 list.Add(r);
@@ -114,7 +184,7 @@ public static class Masters
         List<Holding> Stocks(List<StockRow> picks, double share, Func<StockRow, string> why, int want)
         {
             var h = new List<Holding>();
-            if (kr.Count == 0) notes.Add("[가치 분석]을 아직 안 돌려서 종목을 고를 수 없어요. 주식 몫은 KODEX 200으로 채웠어요.");
+            if (kr.Count == 0) notes.Add("[이적시장 › 스카우트]을 아직 안 돌려서 종목을 고를 수 없어요. 주식 몫은 KODEX 200으로 채웠어요.");
             else if (picks.Count < want) notes.Add($"조건을 통과한 종목이 {picks.Count}개뿐이라 " + (picks.Count == 0 ? "주식 몫은 KODEX 200으로 채웠어요." : "그만큼만 담았어요."));
             if (picks.Count == 0) { h.Add(Etf("069500", share, "조건에 맞는 종목이 없어 한국 대표 지수로 대신")); return h; }
             foreach (var r in picks) h.Add(new(r.Q.Code, r.Q.Name, share / picks.Count, null, false, why(r)));
@@ -129,7 +199,7 @@ public static class Masters
                 list.Add(Etf("114260", Portfolio.Target[0], "흔들림을 줄이는 국고채"));
                 list.Add(Etf("360750", Portfolio.Target[1], "미국 대표 기업 500개"));
                 list.Add(Etf("458730", Portfolio.Target[2], "10년 넘게 배당한 미국 회사 100개, 매달 분배"));
-                if (incomePicks.Count == 0) { list.Add(Etf("458730", Portfolio.Target[3], "")); notes.Add("[가치 분석] 결과가 없어 개별주 몫을 배당 ETF에 더했어요."); }
+                if (incomePicks.Count == 0) { list.Add(Etf("458730", Portfolio.Target[3], "")); notes.Add("[이적시장 › 스카우트] 결과가 없어 개별주 몫을 배당 ETF에 더했어요."); }
                 else foreach (var r in incomePicks)
                     list.Add(new(r.Q.Code, r.Q.Name, Portfolio.Target[3] / incomePicks.Count, null, false, $"배당 {r.Div:0.0}% · 3년 PER {r.Per3:0.0}"));
                 break;

@@ -4,7 +4,7 @@ namespace KrxScreen;
 class TermText : RichTextBox
 {
     // 글에서 찾을 용어 (너무 흔한 말은 빼서 글이 파랗게 도배되지 않게)
-    static readonly string[] Stop = { "지수", "점수", "업종", "세금", "분산", "국면", "시총", "개별주", "포트폴리오", "세후", "환율", "채권", "역전", "고점", "흐름" };
+    static readonly string[] Stop = { "지수", "점수", "업종", "세금", "분산", "국면", "시총", "개별주", "포트폴리오", "세후", "환율", "채권", "역전", "고점", "흐름", "감독", "코치", "코치진", "포지션", "별점" };
     static readonly List<(string word, Glossary.Entry e)> words = Glossary.All
         .SelectMany(e => e.Aliases.Append(e.Key).Select(a => (a, e)))
         .Where(x => x.a.Length >= 2 && !Stop.Contains(x.a))
@@ -76,7 +76,7 @@ class TermPopup : Form
     readonly Label term = new() { Dock = DockStyle.Top, Height = 22, Font = Theme.Small, ForeColor = Theme.Muted, AutoEllipsis = true };
     readonly Label summary = new() { Dock = DockStyle.Top, Height = 52, Font = Theme.Bold, ForeColor = Color.FromArgb(96, 165, 250) };
     readonly TermText body = new() { Dock = DockStyle.Fill };
-    readonly Button full = Theme.Secondary("배우기에서 전체 보기");
+    readonly Button full = Theme.Secondary("아카데미에서 전체 보기");
     Glossary.Entry entry;
     Action<Glossary.Entry> openFull;
 
