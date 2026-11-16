@@ -69,6 +69,15 @@ public static class Income
         }
     }
 
+    // 종목코드 → DART 고유번호 (우선주는 보통주 회사로). 없으면 null
+    public static async Task<string> CorpCode(string dartKey, string code)
+    {
+        using var http = Screener.NewHttp();
+        var map = await CorpMap(dartKey, http);
+        string baseCode = code.EndsWith("0") ? code : code[..5] + "0";
+        return map.TryGetValue(baseCode, out var corp) ? corp : null;
+    }
+
     // DART 기업개황: 대표자, 설립일(yyyyMMdd), 홈페이지
     public record Company(string Ceo, string Established, string Homepage);
 

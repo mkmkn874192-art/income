@@ -64,6 +64,10 @@ public static class Game
         public Dictionary<int, double> FinIncome { get; set; } = new();    // 연도별 금융소득(배당·이자, 세전) — 종합과세 기준 확인용
         public int OverseasTaxSettled { get; set; }  // 양도세를 낸 마지막 귀속 연도
         public List<string> Missions { get; set; } = new(); // 달성한 미션 (GameMissions.All의 Key)
+        public int ScoutUsed { get; set; }                  // 쓴 스카우트 보고서 수
+        public List<string> Revealed { get; set; } = new(); // 숨은 능력치를 연 종목코드
+        public double LastBaseRate { get; set; }            // 이벤트 카드용: 지난번 기준금리·국고채 3년
+        public double LastKtb3 { get; set; }
         public double Deposited { get; set; }     // 시드 + 받은 월급 합계 (수익률 기준)
         public string Season { get; set; }        // "2026년 4분기"
         public double SeasonStartValue { get; set; }
@@ -239,7 +243,8 @@ public static class Game
 
     // 지난 처리 이후 지금까지 일어난 일을 처리하고, 새로 생긴 소식을 돌려준다.
     // price: 지금 가격, divs: 종목코드 → 배당 기록(배당락일, 주당 금액)
-    public static List<GameNews> Tick(Func<string, double?> price, double fx, IReadOnlyDictionary<string, List<Yahoo.Point>> divs)
+    public static List<GameNews> Tick(Func<string, double?> price, double fx, IReadOnlyDictionary<string, List<Yahoo.Point>> divs,
+                                      double? baseRate = null, double? ktb3 = null)
     {
         if (!S.Started) return new();
         var now = DateTime.Now;
@@ -264,6 +269,14 @@ public static class Game
                     S.TaxPaid += pre - got;
                     AddFinIncome(p.Date, pre);
                     Add(p.Date, "배당", $"{h.Name} 배당 {Won.Krw(got)} (주당 {Won.Price(p.Close, h.Currency)} × {h.Qty:N0}주, 세후)");
+                    // 이벤트 카드: 지난번 배당보다 10% 넘게 늘거나 줄면
+                    var prev = pays.LastOrDefault(x => x.Date < p.Date);
+                    if (prev != null && prev.Close > 0)
+                    {
+                        double ch = (p.Close / prev.Close - 1) * 100;
+                        if (ch >= 10) Add(p.Date, "이벤트", $"[배당 인상 카드] {h.Name} 주당 배당 {Won.Price(prev.Close, h.Currency)} → {Won.Price(p.Close, h.Currency)} ({ch:+0}%) · 회사가 이익을 주주와 더 나누기로 했어요");
+                        else if (ch <= -10) Add(p.Date, "이벤트", $"[배당 삭감 카드] {h.Name} 주당 배당 {Won.Price(prev.Close, h.Currency)} → {Won.Price(p.Close, h.Currency)} ({ch:+0}%) · 실적이나 회사 사정을 확인해 보세요 (특별배당이 빠진 것일 수도 있어요)");
+                    }
                 }
 
         // 3) 예약 주문: 장이 열려 있으면 지금 가격으로
@@ -274,12 +287,15 @@ public static class Game
                 Execute(o, px, fx, now);
             }
 
-        // 4) 소식: 보유 종목 급등락(±5%), 환율 2% 이상 변동
+        // 4) 소식: 보유 종목 급등락(±5%), 환율 2% 이상 변동. 같은 수량을 지난 가격·지금 가격으로 매겨 시장 폭풍도 본다 (팔아서 줄어든 건 빼고)
+        double before_ = 0, after_ = 0;
         foreach (var h in S.Holdings)
             if (price(h.Code) is double px && px > 0)
             {
                 if (S.LastPrice.TryGetValue(h.Code, out var last) && last > 0)
                 {
+                    before_ += h.Qty * last * Fx(h.Currency, fx);
+                    after_ += h.Qty * px * Fx(h.Currency, fx);
                     double ch = (px / last - 1) * 100;
                     if (Math.Abs(ch) >= 5) Add(now, "소식", $"{h.Name} {(ch > 0 ? "급등" : "급락")} {ch:+0.0;-0.0}% · {Won.Price(last, h.Currency)} → {Won.Price(px, h.Currency)}");
                 }
@@ -288,6 +304,24 @@ public static class Game
         if (S.LastFx > 0 && Math.Abs(fx / S.LastFx - 1) >= 0.02)
             Add(now, "소식", $"환율 {(fx > S.LastFx ? "상승" : "하락")} · 1달러 {S.LastFx:N0}원 → {fx:N0}원 (미국 종목 원화 가치가 {(fx > S.LastFx ? "올라요" : "내려요")})");
         if (S.LastFx <= 0 || Math.Abs(fx / S.LastFx - 1) >= 0.02) S.LastFx = fx;
+
+        // 4-2) 이벤트 카드: 금리·시장
+        if (baseRate is double br)
+        {
+            if (S.LastBaseRate > 0 && Math.Abs(br - S.LastBaseRate) >= 0.24)
+                Add(now, "이벤트", br > S.LastBaseRate
+                    ? $"[기준금리 인상 카드] {S.LastBaseRate:0.00}% → {br:0.00}% · 대출 이자는 오르고, 이미 가진 채권 값은 내려가요. 예금·새 채권 금리는 올라요"
+                    : $"[기준금리 인하 카드] {S.LastBaseRate:0.00}% → {br:0.00}% · 대출 이자는 내리고, 이미 가진 채권 값은 올라요. 예금 금리는 내려가요");
+            if (S.LastBaseRate <= 0 || Math.Abs(br - S.LastBaseRate) >= 0.24) S.LastBaseRate = br;
+        }
+        if (ktb3 is double k3)
+        {
+            if (S.LastKtb3 > 0 && Math.Abs(k3 - S.LastKtb3) >= 0.3)
+                Add(now, "이벤트", $"[금리 급변 카드] 국고채 3년 {S.LastKtb3:0.00}% → {k3:0.00}% · 채권 ETF는 금리와 반대로 움직여요 ({(k3 > S.LastKtb3 ? "가격 내림" : "가격 오름")})");
+            if (S.LastKtb3 <= 0 || Math.Abs(k3 - S.LastKtb3) >= 0.3) S.LastKtb3 = k3;
+        }
+        if (before_ > 0 && after_ <= before_ * 0.95)
+            Add(now, "이벤트", $"[시장 폭풍 카드] 가진 종목 평가액이 지난번보다 {(after_ / before_ - 1) * 100:0.0}% ({Won.Krw(before_)} → {Won.Krw(after_)}) · 이럴 때 파는지 버티는지가 실력이에요");
 
         // 5) 시즌(분기) 결산
         string season = SeasonOf(now);
@@ -327,6 +361,21 @@ public static class Game
         S.FinIncome[at.Year] = after;
         if (before <= KrTax.FinancialIncomeThreshold && after > KrTax.FinancialIncomeThreshold)
             Add(at, "세금", $"{at.Year}년 금융소득(배당·이자)이 {Won.Krw(KrTax.FinancialIncomeThreshold)}을 넘었어요 · 넘는 부분은 다음 해 5월 종합소득세로 다른 소득과 합쳐 계산돼요 (게임에서는 알림만)");
+    }
+
+    // 스카우트 보고서: 처음 3장, 미션을 달성해 레벨이 오를 때마다 2장
+    public static int ScoutLeft() => Math.Max(0, 3 + 2 * S.Missions.Count - S.ScoutUsed);
+    public static bool IsRevealed(string code) => S.Revealed.Contains(code);
+
+    public static bool Reveal(string code, string name)
+    {
+        if (IsRevealed(code)) return true;
+        if (ScoutLeft() <= 0) return false;
+        S.ScoutUsed++;
+        S.Revealed.Add(code);
+        Add(DateTime.Now, "스카우트", $"{name} 스카우트 보고서 · 숨은 능력치를 열었어요 (남은 보고서 {ScoutLeft()}장)");
+        Save();
+        return true;
     }
 
     public static string Grade(double seasonReturn) => seasonReturn switch

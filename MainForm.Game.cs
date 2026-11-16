@@ -331,7 +331,7 @@ public partial class MainForm
                     catch { } // 다음에 다시
                 }
             }
-            var news = Game.Tick(GamePrice, Market.UsdKrw, gameDivs);
+            var news = Game.Tick(GamePrice, Market.UsdKrw, gameDivs, Macro.Last?.BaseRate, Macro.Last?.Ktb3);
             bool first = !gameSessionTicked;
             gameSessionTicked = true;
             if ((welcome || first) && news.Count > 0)

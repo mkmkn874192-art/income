@@ -597,6 +597,20 @@ public partial class MainForm : Form
         };
         if (rowByCode.ContainsKey(code)) actions.Add(("거래소에서 보기", () => { txtSearch.Text = code; ShowPage(PMarket); }));
         if (r.Q.IsUs) actions.Add(("별명 바꾸기", () => RenameStock(r)));
+        bool revealed = Game.IsRevealed(code);
+        if (!revealed)
+            actions.Add(($"스카우트 보고서 쓰기 (남은 {Game.ScoutLeft()}장)", () =>
+            {
+                if (Game.Reveal(code, r.Q.Name)) OpenCard(code, name);
+                else MessageBox.Show("스카우트 보고서가 없어요. [시뮬레이터 › 게임 모드]에서 미션을 달성하면 레벨이 오르고 보고서가 2장씩 생겨요.", "스카우트 보고서",
+                                     MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }));
+        Func<Task<string>> hidden = !revealed ? null : async () =>
+        {
+            var list = await Hidden.Get(r, keys[1], async () => { await LoadMonthly(new[] { asset }); return simCache.GetValueOrDefault(sym); });
+            return string.Join("\n", list.Select(h => $"• {h.Name}  {(h.Value is int hv ? (h.Neutral ? $"{hv}/20 (성격)" : $"{hv}/20") : "–")}  — {h.Hint}"))
+                   + "\n숨은 능력치는 공시(DART 최대주주·임원 현황)와 10년 가격·배당 기록으로 매긴 참고용이에요. '정책 영향'은 높다고 좋은 게 아니라 정부 정책을 많이 탄다는 뜻이에요.";
+        };
         PlayerCard.Open(this, new PlayerCard.Data(r, ttm, vol,
             async () =>
             {
@@ -604,7 +618,7 @@ public partial class MainForm : Form
                 if (!chartCache.TryGetValue(key, out var pts)) pts = chartCache[key] = await Yahoo.Chart(Yahoo.Symbol(r.Q), "1y");
                 return pts;
             },
-            () => ProfileText(r), actions.ToArray()));
+            () => ProfileText(r), actions.ToArray(), hidden));
     }
 
     Control BuildScreenPage()

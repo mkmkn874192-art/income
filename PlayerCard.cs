@@ -245,7 +245,7 @@ class PlayerCard : Form
     }
 
     public record Data(StockRow Row, double? TtmYield, double? Vol, Func<Task<List<Yahoo.Point>>> Chart, Func<Task<string>> Profile,
-                       (string text, Action act)[] Actions);
+                       (string text, Action act)[] Actions, Func<Task<string>> Hidden = null);
 
     public static void Open(Form owner, Data d)
     {
@@ -300,7 +300,14 @@ class PlayerCard : Form
         catch (Exception ex) { if (v == version) chart.SetMessage("주가를 못 받았어요: " + ex.Message.Split('\n')[0]); }
         string prof;
         try { prof = await d.Profile(); } catch (Exception ex) { prof = "회사 정보를 못 받았어요: " + ex.Message.Split('\n')[0]; }
-        if (v == version && !IsDisposed) report.SetText(rep + "\n\n■ 회사 소개\n" + prof);
+        if (v != version || IsDisposed) return;
+        report.SetText(rep + "\n\n■ 회사 소개\n" + prof + "\n\n■ 숨은 능력치\n" + (d.Hidden == null
+            ? $"🔒 경영진·정부와의 관계·위기 회복력 등 5가지가 숨어 있어요. 아래 [스카우트 보고서]를 쓰면 열려요 (남은 보고서 {Game.ScoutLeft()}장 · 미션을 달성하면 늘어요)."
+            : "받는 중..."));
+        if (d.Hidden == null) return;
+        string hid;
+        try { hid = await d.Hidden(); } catch (Exception ex) { hid = "숨은 능력치를 못 받았어요: " + ex.Message.Split('\n')[0]; }
+        if (v == version && !IsDisposed) report.SetText(rep + "\n\n■ 회사 소개\n" + prof + "\n\n■ 숨은 능력치 (스카우트 보고서)\n" + hid);
     }
 }
 
